@@ -3,28 +3,39 @@ import { NextResponse } from 'next/server';
 
 /**
  * GET /api/subscription
- * Returns the current user's subscription state.
+ * Returns {isPro: boolean} for the current user.
  * Called on page load to gate premium features immediately.
+ * Always returns a safe value — never throws.
  */
 export async function GET() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) {
+    // Not logged in → definitely not pro
+    if (!user) return NextResponse.json({ isPro: false });
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('is_pro, subscription_status')
+      .eq('id', user.id)
+      .single();
+
+    // No row or query error → treat as not subscribed (safe default)
+    if (error || !profile) {
+      console.warn('[GET /api/subscription] No profile row for user', user.id, '— defaulting to isPro: false');
+      return NextResponse.json({ isPro: false });
+    }
+
+    const isPro =
+      profile.is_pro === true ||
+      profile.subscription_status === 'active' ||
+      profile.subscription_status === 'trialing';
+
+    return NextResponse.json({ isPro });
+  } catch (err) {
+    // Any unexpected error → fail closed (not pro)
+    console.error('[GET /api/subscription] Unexpected error:', err);
     return NextResponse.json({ isPro: false });
   }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_pro, subscription_status')
-    .eq('id', user.id)
-    .single();
-
-  // Accept either the simple boolean OR the status string
-  const isPro =
-    profile?.is_pro === true ||
-    profile?.subscription_status === 'active' ||
-    profile?.subscription_status === 'trialing';
-
-  return NextResponse.json({ isPro });
 }
