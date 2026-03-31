@@ -47,6 +47,9 @@ export async function POST() {
       },
       metadata: { user_id: user.id },
       customer_email: user.email,
+      custom_text: {
+        submit: { message: 'Subscribe to Futures Edge AI — 3 days free, then $19/month. Cancel anytime.' },
+      },
       success_url: `${baseUrl}/dashboard?upgraded=true`,
       cancel_url: `${baseUrl}/upgrade?cancelled=true`,
     });
