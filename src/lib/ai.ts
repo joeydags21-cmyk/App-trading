@@ -51,11 +51,11 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 }
 
 Generate 5-8 insights. Focus on:
-- Time-of-day patterns (when do losses cluster?)
 - Consecutive loss behavior (revenge trading?)
 - Win/loss ratio analysis
 - Overtrading patterns
-- Position sizing consistency
+- Symbol-specific performance (which symbols win vs lose?)
+- Daily trade count patterns
 
 IMPORTANT: Never claim certainty. Never promise profits. Focus on behavioral patterns only.`;
 
@@ -92,7 +92,7 @@ TODAY'S DATA:
 - Trades taken: ${safeTodayTrades.length}
 - P&L: $${todayPnl.toFixed(2)}
 - Wins: ${todayWins} / ${safeTodayTrades.length}
-- Tickers traded: ${Array.from(new Set(safeTodayTrades.map(t => t.ticker))).join(', ')}
+- Symbols traded: ${Array.from(new Set(safeTodayTrades.map(t => t.symbol))).join(', ')}
 - Historical avg trade PnL: $${historicalAvgPnl.toFixed(2)}
 
 Write a brief, honest, supportive report with:
@@ -123,18 +123,6 @@ function buildTradeSummary(trades: Trade[]): string {
   const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0;
   const avgLoss = losses.length > 0 ? losses.reduce((s, t) => s + t.pnl, 0) / losses.length : 0;
 
-  // Time of day breakdown
-  const hourGroups: Record<string, { wins: number; losses: number; pnl: number }> = {};
-  safeTrades.forEach((t) => {
-    if (t.time_of_day) {
-      const hour = t.time_of_day.split(':')[0];
-      if (!hourGroups[hour]) hourGroups[hour] = { wins: 0, losses: 0, pnl: 0 };
-      if (t.pnl > 0) hourGroups[hour].wins++;
-      else hourGroups[hour].losses++;
-      hourGroups[hour].pnl += t.pnl;
-    }
-  });
-
   // Consecutive loss analysis
   const sortedTrades = [...safeTrades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   let maxConsecLosses = 0;
@@ -157,6 +145,12 @@ function buildTradeSummary(trades: Trade[]): string {
     : 0;
   const maxTradesInDay = dateValues.length > 0 ? Math.max(...dateValues) : 0;
 
+  // Symbol breakdown
+  const symbolPnl: Record<string, number> = {};
+  safeTrades.forEach((t) => {
+    symbolPnl[t.symbol] = (symbolPnl[t.symbol] || 0) + t.pnl;
+  });
+
   return `Total trades: ${safeTrades.length}
 Total P&L: $${totalPnl.toFixed(2)}
 Win rate: ${safeTrades.length > 0 ? ((wins.length / safeTrades.length) * 100).toFixed(1) : '0.0'}%
@@ -165,7 +159,6 @@ Win/loss ratio: ${avgLoss !== 0 ? (Math.abs(avgWin / avgLoss)).toFixed(2) : 'N/A
 Max consecutive losses: ${maxConsecLosses}
 Avg trades per day: ${avgTradesPerDay.toFixed(1)}
 Max trades in one day: ${maxTradesInDay}
-Tickers: ${Array.from(new Set(safeTrades.map(t => t.ticker))).join(', ')}
-Time-of-day P&L by hour: ${JSON.stringify(hourGroups)}
+P&L by symbol: ${JSON.stringify(symbolPnl)}
 Recent 10 trade PnLs (oldest→newest): ${sortedTrades.slice(-10).map(t => t.pnl.toFixed(0)).join(', ')}`;
 }

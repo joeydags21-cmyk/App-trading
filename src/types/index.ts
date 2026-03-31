@@ -2,13 +2,9 @@ export interface Trade {
   id: string;
   user_id: string;
   date: string;
-  ticker: string;
+  symbol: string;
   direction: 'long' | 'short';
-  entry_price: number;
-  exit_price: number;
-  position_size: number;
   pnl: number;
-  time_of_day: string | null;
   notes: string | null;
   created_at: string;
 }

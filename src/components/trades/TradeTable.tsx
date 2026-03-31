@@ -23,7 +23,7 @@ export default function TradeTable({ trades, onDelete }: TradeTableProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-zinc-800">
-            {['Date', 'Ticker', 'Direction', 'Entry', 'Exit', 'Size', 'P&L', ''].map((h) => (
+            {['Date', 'Symbol', 'Direction', 'P&L', ''].map((h) => (
               <th key={h} className="text-left py-3 px-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">
                 {h}
               </th>
@@ -34,7 +34,7 @@ export default function TradeTable({ trades, onDelete }: TradeTableProps) {
           {safeTrades.map((trade) => (
             <tr key={trade.id} className="hover:bg-zinc-800/30 transition-colors group">
               <td className="py-3.5 px-3 text-zinc-400 font-mono text-xs">{trade.date}</td>
-              <td className="py-3.5 px-3 font-semibold text-zinc-200 tracking-wide">{trade.ticker}</td>
+              <td className="py-3.5 px-3 font-semibold text-zinc-200 tracking-wide">{trade.symbol}</td>
               <td className="py-3.5 px-3">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
                   trade.direction === 'long'
@@ -44,9 +44,6 @@ export default function TradeTable({ trades, onDelete }: TradeTableProps) {
                   {trade.direction === 'long' ? '↑ Long' : '↓ Short'}
                 </span>
               </td>
-              <td className="py-3.5 px-3 text-zinc-400 font-mono text-xs">{trade.entry_price}</td>
-              <td className="py-3.5 px-3 text-zinc-400 font-mono text-xs">{trade.exit_price}</td>
-              <td className="py-3.5 px-3 text-zinc-400 text-xs">{trade.position_size}</td>
               <td className={`py-3.5 px-3 font-semibold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {trade.pnl >= 0 ? '+' : '-'}${Math.abs(trade.pnl).toFixed(2)}
               </td>

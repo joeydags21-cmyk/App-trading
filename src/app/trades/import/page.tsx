@@ -133,10 +133,10 @@ export default function ImportPage() {
           Show expected CSV column format
         </summary>
         <div className="mt-3 bg-zinc-950 rounded-lg p-4 border border-zinc-800 overflow-x-auto">
-          <pre className="font-mono text-xs text-zinc-400 leading-relaxed whitespace-pre">{`Date,Ticker,Direction,Entry Price,Exit Price,Position Size,PnL,Time,Notes
-2024-01-15,ES,long,4800.25,4815.50,2,612.50,09:45,Good momentum trade
-2024-01-15,NQ,short,16500.00,16480.00,1,400.00,14:30,
-2024-01-16,CL,long,72.50,72.10,3,-360.00,10:15,Stopped out`}</pre>
+          <pre className="font-mono text-xs text-zinc-400 leading-relaxed whitespace-pre">{`Date,Symbol,Direction,PnL,Notes
+2024-01-15,ES,long,612.50,Good momentum trade
+2024-01-15,NQ,short,400.00,
+2024-01-16,CL,long,-360.00,Stopped out`}</pre>
         </div>
         <p className="text-xs text-zinc-600 mt-2">Column names are flexible — the importer recognises common variations.</p>
       </details>

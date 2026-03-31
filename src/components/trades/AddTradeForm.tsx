@@ -10,13 +10,9 @@ interface AddTradeFormProps {
 export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
-    ticker: 'ES',
+    symbol: '',
     direction: 'long',
-    entry_price: '',
-    exit_price: '',
-    position_size: '1',
     pnl: '',
-    time_of_day: '',
     notes: '',
   });
   const [loading, setLoading] = useState(false);
@@ -32,33 +28,20 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
     setError('');
     setSuccess(false);
 
-    // Client-side validation
+    // Validation
     if (!form.date) { setError('Date is required.'); return; }
-    if (!form.ticker.trim()) { setError('Ticker is required.'); return; }
-    if (form.entry_price === '' || isNaN(parseFloat(form.entry_price))) {
-      setError('Entry price must be a valid number.'); return;
-    }
-    if (form.exit_price === '' || isNaN(parseFloat(form.exit_price))) {
-      setError('Exit price must be a valid number.'); return;
-    }
-    if (form.position_size === '' || isNaN(parseFloat(form.position_size)) || parseFloat(form.position_size) <= 0) {
-      setError('Position size must be a positive number.'); return;
-    }
+    if (!form.symbol.trim()) { setError('Symbol is required (e.g. ES, NQ, CL).'); return; }
     if (form.pnl === '' || isNaN(parseFloat(form.pnl))) {
-      setError('P&L must be a valid number.'); return;
+      setError('P&L must be a valid number (e.g. 250 or -150).'); return;
     }
 
     setLoading(true);
     try {
       await onAdd({
         date: form.date,
-        ticker: form.ticker.trim().toUpperCase(),
+        symbol: form.symbol.trim().toUpperCase(),
         direction: form.direction as 'long' | 'short',
-        entry_price: parseFloat(form.entry_price),
-        exit_price: parseFloat(form.exit_price),
-        position_size: parseFloat(form.position_size),
         pnl: parseFloat(form.pnl),
-        time_of_day: form.time_of_day || null,
         notes: form.notes.trim() || null,
       });
 
@@ -66,13 +49,9 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
       setSuccess(true);
       setForm({
         date: new Date().toISOString().split('T')[0],
-        ticker: 'ES',
+        symbol: '',
         direction: 'long',
-        entry_price: '',
-        exit_price: '',
-        position_size: '1',
         pnl: '',
-        time_of_day: '',
         notes: '',
       });
     } catch (err: any) {
@@ -105,38 +84,47 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
 
       <div>
         <label className={label}>Date</label>
-        <input type="date" required value={form.date} onChange={(e) => set('date', e.target.value)} className={input} />
+        <input
+          type="date"
+          required
+          value={form.date}
+          onChange={(e) => set('date', e.target.value)}
+          className={input}
+        />
       </div>
       <div>
-        <label className={label}>Ticker</label>
-        <input type="text" required value={form.ticker} onChange={(e) => set('ticker', e.target.value)} className={input} placeholder="ES, NQ, CL..." />
+        <label className={label}>Symbol</label>
+        <input
+          type="text"
+          required
+          value={form.symbol}
+          onChange={(e) => set('symbol', e.target.value)}
+          className={input}
+          placeholder="ES, NQ, CL..."
+        />
       </div>
       <div>
         <label className={label}>Direction</label>
-        <select value={form.direction} onChange={(e) => set('direction', e.target.value)} className={input}>
+        <select
+          value={form.direction}
+          onChange={(e) => set('direction', e.target.value)}
+          className={input}
+        >
           <option value="long">Long</option>
           <option value="short">Short</option>
         </select>
       </div>
       <div>
-        <label className={label}>Position Size</label>
-        <input type="number" required step="0.01" min="0.01" value={form.position_size} onChange={(e) => set('position_size', e.target.value)} className={input} />
-      </div>
-      <div>
-        <label className={label}>Entry Price</label>
-        <input type="number" required step="0.01" value={form.entry_price} onChange={(e) => set('entry_price', e.target.value)} className={input} placeholder="4800.25" />
-      </div>
-      <div>
-        <label className={label}>Exit Price</label>
-        <input type="number" required step="0.01" value={form.exit_price} onChange={(e) => set('exit_price', e.target.value)} className={input} placeholder="4815.50" />
-      </div>
-      <div>
         <label className={label}>P&amp;L ($)</label>
-        <input type="number" required step="0.01" value={form.pnl} onChange={(e) => set('pnl', e.target.value)} className={input} placeholder="-250.00" />
-      </div>
-      <div>
-        <label className={label}>Time of Day</label>
-        <input type="time" value={form.time_of_day} onChange={(e) => set('time_of_day', e.target.value)} className={input} />
+        <input
+          type="number"
+          required
+          step="0.01"
+          value={form.pnl}
+          onChange={(e) => set('pnl', e.target.value)}
+          className={input}
+          placeholder="-250.00"
+        />
       </div>
       <div className="col-span-2">
         <label className={label}>Notes (optional)</label>
@@ -144,7 +132,7 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
           value={form.notes}
           onChange={(e) => set('notes', e.target.value)}
           className={`${input} h-20 resize-none`}
-          placeholder="What happened on this trade? FOMO? Followed your plan?"
+          placeholder="What happened? FOMO? Followed your plan?"
         />
       </div>
       <div className="col-span-2 pt-1">

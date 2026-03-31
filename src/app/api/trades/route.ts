@@ -33,14 +33,10 @@ export async function POST(req: NextRequest) {
   const inserts = rows.map((t) => ({
     user_id: user.id,
     date: t.date,
-    ticker: t.ticker,
-    direction: t.direction,
-    entry_price: t.entry_price,
-    exit_price: t.exit_price,
-    position_size: t.position_size,
-    pnl: t.pnl,
-    time_of_day: t.time_of_day ?? null,
-    notes: t.notes ?? null,
+    symbol: (t.symbol || t.ticker || '').toString().trim().toUpperCase(),
+    direction: t.direction === 'short' ? 'short' : 'long',
+    pnl: typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl) || 0,
+    notes: t.notes?.trim() || null,
   }));
 
   console.log('[POST /api/trades] Inserting', inserts.length, 'trade(s) for user', user.id);
@@ -60,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Insert returned no data — check RLS policies' }, { status: 500 });
   }
 
-  console.log('[POST /api/trades] Inserted successfully:', data);
+  console.log('[POST /api/trades] Inserted successfully:', data.length, 'row(s)');
   return NextResponse.json(data);
 }
 

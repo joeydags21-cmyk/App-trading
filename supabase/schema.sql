@@ -4,15 +4,11 @@ create extension if not exists "uuid-ossp";
 -- Trades table
 create table trades (
   id uuid default uuid_generate_v4() primary key,
-  user_id uuid references auth.users not null,
-  date date not null,
-  ticker text not null,
-  direction text not null check (direction in ('long', 'short')),
-  entry_price numeric(12,4) not null,
-  exit_price numeric(12,4) not null,
-  position_size numeric(10,2) not null,
+  user_id uuid references auth.users,
+  date text not null,
+  symbol text not null,
+  direction text not null default 'long' check (direction in ('long', 'short')),
   pnl numeric(12,2) not null,
-  time_of_day time,
   notes text,
   created_at timestamptz default now()
 );
