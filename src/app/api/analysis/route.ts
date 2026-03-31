@@ -1,8 +1,15 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { analyzeTradesWithAI } from '@/lib/ai';
+import { isSubscribed } from '@/lib/subscription';
 
 export async function GET() {
+  // Check subscription
+  const subscribed = await isSubscribed();
+  if (!subscribed) {
+    return NextResponse.json({ error: 'subscription_required' }, { status: 403 });
+  }
+
   // Check API key before doing anything
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error('[GET /api/analysis] ANTHROPIC_API_KEY is not set');

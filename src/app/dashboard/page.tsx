@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import EquityCurve from '@/components/charts/EquityCurve';
 import Link from 'next/link';
+import Paywall from '@/components/Paywall';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ function CoachCard() {
   const [insight, setInsight] = useState<CoachInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [paywalled, setPaywalled] = useState(false);
 
   async function getInsight() {
     setLoading(true);
@@ -78,6 +80,7 @@ function CoachCard() {
     try {
       const res = await fetch('/api/coach');
       const data = await res.json();
+      if (res.status === 403) { setPaywalled(true); return; }
       if (!res.ok) throw new Error(data?.error || 'Unable to generate coaching insights right now. Try again.');
       setInsight(data);
     } catch (err: any) {
@@ -86,6 +89,8 @@ function CoachCard() {
       setLoading(false);
     }
   }
+
+  if (paywalled) return <Paywall />;
 
   return (
     <Card>

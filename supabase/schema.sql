@@ -23,6 +23,22 @@ create table if not exists trades (
 -- alter table trades add column if not exists entry_price numeric(12,4);
 -- alter table trades add column if not exists exit_price numeric(12,4);
 
+-- Profiles table (subscription state)
+create table if not exists profiles (
+  id uuid references auth.users primary key,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  subscription_status text not null default 'inactive',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table profiles enable row level security;
+
+drop policy if exists "Users can read own profile" on profiles;
+create policy "Users can read own profile" on profiles
+  for select using (auth.uid() = id);
+
 -- Rules table
 create table if not exists rules (
   id uuid default uuid_generate_v4() primary key,

@@ -5,11 +5,13 @@ import { AIAnalysis } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import InsightCard from '@/components/analysis/InsightCard';
+import Paywall from '@/components/Paywall';
 
 export default function AnalysisPage() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [paywalled, setPaywalled] = useState(false);
 
   async function runAnalysis() {
     setLoading(true);
@@ -18,7 +20,12 @@ export default function AnalysisPage() {
       const res = await fetch('/api/analysis');
       const data = await res.json();
 
-      // Soft "not enough trades" response — not an error
+      if (res.status === 403) {
+        setPaywalled(true);
+        setLoading(false);
+        return;
+      }
+
       if (data?.error === 'not_enough_trades') {
         setError(data.message);
         setLoading(false);
@@ -35,6 +42,8 @@ export default function AnalysisPage() {
     }
     setLoading(false);
   }
+
+  if (paywalled) return <Paywall />;
 
   const winProb = analysis?.nextTradePrediction.winProbability ?? 0;
   const winColor = winProb >= 60 ? 'bg-emerald-500' : winProb >= 45 ? 'bg-amber-400' : 'bg-red-500';
