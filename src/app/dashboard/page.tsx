@@ -265,17 +265,59 @@ export default function DashboardPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPro, setIsPro] = useState(false);
+  const [checkoutBanner, setCheckoutBanner] = useState<'success' | 'cancel' | null>(null);
+  const [subRefreshing, setSubRefreshing] = useState(false);
+
+  async function fetchSubscription(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/subscription');
+      const data = await res.json();
+      return data?.isPro === true;
+    } catch {
+      return false;
+    }
+  }
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/trades').then((r) => r.json()),
-      fetch('/api/subscription').then((r) => r.json()),
-    ]).then(([tradesData, subData]) => {
-      const pro = subData?.isPro === true;
+    // Detect Stripe return params before fetching
+    const params = new URLSearchParams(window.location.search);
+    const checkoutStatus = params.get('checkout');
+
+    // Clean the URL immediately so params don't persist on refresh
+    if (checkoutStatus) {
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+      setCheckoutBanner(checkoutStatus === 'success' ? 'success' : 'cancel');
+    }
+
+    async function load() {
+      let pro = false;
+
+      if (checkoutStatus === 'success') {
+        // On successful return: poll subscription up to 3× with 1s delay
+        // Stripe webhook may take a moment to write is_pro=true
+        setSubRefreshing(true);
+        for (let attempt = 0; attempt < 3; attempt++) {
+          pro = await fetchSubscription();
+          if (pro) break;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        setSubRefreshing(false);
+      } else {
+        pro = await fetchSubscription();
+      }
+
+      const [tradesData] = await Promise.all([
+        fetch('/api/trades').then((r) => r.json()),
+      ]);
+
       console.log('USER STATUS:', pro);
       setTrades(Array.isArray(tradesData) ? tradesData : []);
       setIsPro(pro);
-    }).finally(() => setLoading(false));
+      setLoading(false);
+    }
+
+    load();
   }, []);
 
   const stats = computeStats(trades);
@@ -296,7 +338,7 @@ export default function DashboardPage() {
     return (
       <div className="flex items-center gap-2 text-zinc-600 text-sm">
         <Spinner />
-        Loading...
+        {subRefreshing ? 'Updating your account...' : 'Loading...'}
       </div>
     );
   }
@@ -312,6 +354,35 @@ export default function DashboardPage() {
             : 'Your trading performance at a glance'}
         </p>
       </div>
+
+      {/* Stripe return banners */}
+      {checkoutBanner === 'success' && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4 flex items-start gap-3">
+          <span className="text-emerald-400 flex-shrink-0 mt-0.5">
+            <svg width="16" height="16" viewBox="0 0 15 15" fill="none">
+              <path d="M3 7.5L6 10.5L12 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+          <div>
+            <p className="text-emerald-400 text-sm font-semibold">Free trial started successfully</p>
+            <p className="text-emerald-400/70 text-sm mt-0.5">Your account is now active. AI Analysis and Trading Coach are unlocked.</p>
+          </div>
+        </div>
+      )}
+      {checkoutBanner === 'cancel' && (
+        <div className="bg-zinc-800 border border-zinc-700 rounded-xl px-5 py-4 flex items-start gap-3">
+          <span className="text-zinc-500 flex-shrink-0 mt-0.5">
+            <svg width="16" height="16" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M7.5 5v4M7.5 10.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <p className="text-zinc-300 text-sm font-semibold">Checkout canceled</p>
+            <p className="text-zinc-500 text-sm mt-0.5">No charges were made. You can start your free trial anytime from AI Analysis.</p>
+          </div>
+        </div>
+      )}
 
       {/* ── EMPTY STATE ── */}
       {trades.length === 0 && (

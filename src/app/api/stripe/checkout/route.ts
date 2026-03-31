@@ -50,8 +50,8 @@ export async function POST() {
       custom_text: {
         submit: { message: 'Subscribe to Futures Edge AI — 3 days free, then $19/month. Cancel anytime.' },
       },
-      success_url: `${baseUrl}/dashboard?upgraded=true`,
-      cancel_url: `${baseUrl}/upgrade?cancelled=true`,
+      success_url: `${baseUrl}/dashboard?checkout=success`,
+      cancel_url: `${baseUrl}/dashboard?checkout=cancel`,
     });
 
     return NextResponse.json({ url: session.url });
