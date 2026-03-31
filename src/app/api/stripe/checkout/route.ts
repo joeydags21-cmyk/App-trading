@@ -31,7 +31,14 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!baseUrl) {
+    console.error('[POST /api/stripe/checkout] NEXT_PUBLIC_APP_URL is not set');
+    return NextResponse.json(
+      { error: 'App URL is not configured. Add NEXT_PUBLIC_APP_URL to your environment variables.' },
+      { status: 500 }
+    );
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
