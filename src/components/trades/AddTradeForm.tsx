@@ -25,21 +25,30 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  function parseOptionalNumber(val: string): number | null {
+    if (val === '' || val == null) return null;
+    const n = parseFloat(val);
+    return isNaN(n) ? null : n;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setSuccess(false);
 
+    // Required field validation
     if (!form.date) { setError('Date is required.'); return; }
     if (!form.symbol.trim()) { setError('Symbol is required (e.g. ES, NQ, CL).'); return; }
-    if (form.entry_price === '' || isNaN(parseFloat(form.entry_price))) {
-      setError('Entry price must be a valid number.'); return;
-    }
-    if (form.exit_price === '' || isNaN(parseFloat(form.exit_price))) {
-      setError('Exit price must be a valid number.'); return;
-    }
     if (form.pnl === '' || isNaN(parseFloat(form.pnl))) {
       setError('P&L must be a valid number (e.g. 250 or -150).'); return;
+    }
+
+    // Optional field validation — only check if user filled them in
+    if (form.entry_price !== '' && isNaN(parseFloat(form.entry_price))) {
+      setError('Entry price must be a valid number or left blank.'); return;
+    }
+    if (form.exit_price !== '' && isNaN(parseFloat(form.exit_price))) {
+      setError('Exit price must be a valid number or left blank.'); return;
     }
 
     setLoading(true);
@@ -48,8 +57,8 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
         date: form.date,
         symbol: form.symbol.trim().toUpperCase(),
         direction: form.direction as 'long' | 'short',
-        entry_price: parseFloat(form.entry_price),
-        exit_price: parseFloat(form.exit_price),
+        entry_price: parseOptionalNumber(form.entry_price),
+        exit_price: parseOptionalNumber(form.exit_price),
         pnl: parseFloat(form.pnl),
         notes: form.notes.trim() || null,
       });
@@ -67,7 +76,7 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
       });
     } catch (err: any) {
       console.error('[AddTradeForm] Trade submission failed:', err);
-      setError(err?.message || 'Failed to add trade. Please try again.');
+      setError(err?.message || 'Unable to save trade. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -78,45 +87,106 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-5">
+      {/* Error */}
       {error && (
         <div className="col-span-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
           <p className="text-red-400 text-sm font-medium">Error</p>
           <p className="text-red-400/80 text-sm mt-0.5">{error}</p>
         </div>
       )}
+
+      {/* Success */}
       {success && (
         <div className="col-span-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3">
           <p className="text-emerald-400 text-sm font-medium">Trade added successfully</p>
         </div>
       )}
 
+      {/* Date */}
       <div>
         <label className={label}>Date</label>
-        <input type="date" required value={form.date} onChange={(e) => set('date', e.target.value)} className={input} />
+        <input
+          type="date"
+          required
+          value={form.date}
+          onChange={(e) => set('date', e.target.value)}
+          className={input}
+        />
       </div>
+
+      {/* Symbol */}
       <div>
         <label className={label}>Symbol</label>
-        <input type="text" required value={form.symbol} onChange={(e) => set('symbol', e.target.value)} className={input} placeholder="ES, NQ, CL..." />
+        <input
+          type="text"
+          required
+          value={form.symbol}
+          onChange={(e) => set('symbol', e.target.value)}
+          className={input}
+          placeholder="ES, NQ, CL..."
+        />
       </div>
+
+      {/* Direction */}
       <div>
         <label className={label}>Direction</label>
-        <select value={form.direction} onChange={(e) => set('direction', e.target.value)} className={input}>
+        <select
+          value={form.direction}
+          onChange={(e) => set('direction', e.target.value)}
+          className={input}
+        >
           <option value="long">Long</option>
           <option value="short">Short</option>
         </select>
       </div>
+
+      {/* P&L — required */}
       <div>
         <label className={label}>P&amp;L ($)</label>
-        <input type="number" required step="0.01" value={form.pnl} onChange={(e) => set('pnl', e.target.value)} className={input} placeholder="-250.00" />
+        <input
+          type="number"
+          required
+          step="0.01"
+          value={form.pnl}
+          onChange={(e) => set('pnl', e.target.value)}
+          className={input}
+          placeholder="-250.00"
+        />
       </div>
+
+      {/* Entry price — optional */}
       <div>
-        <label className={label}>Entry Price</label>
-        <input type="number" required step="0.01" value={form.entry_price} onChange={(e) => set('entry_price', e.target.value)} className={input} placeholder="4800.25" />
+        <label className={label}>
+          Entry Price
+          <span className="ml-1 text-zinc-600 normal-case font-normal">(optional)</span>
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          value={form.entry_price}
+          onChange={(e) => set('entry_price', e.target.value)}
+          className={input}
+          placeholder="4800.25"
+        />
       </div>
+
+      {/* Exit price — optional */}
       <div>
-        <label className={label}>Exit Price</label>
-        <input type="number" required step="0.01" value={form.exit_price} onChange={(e) => set('exit_price', e.target.value)} className={input} placeholder="4815.50" />
+        <label className={label}>
+          Exit Price
+          <span className="ml-1 text-zinc-600 normal-case font-normal">(optional)</span>
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          value={form.exit_price}
+          onChange={(e) => set('exit_price', e.target.value)}
+          className={input}
+          placeholder="4815.50"
+        />
       </div>
+
+      {/* Notes */}
       <div className="col-span-2">
         <label className={label}>Notes (optional)</label>
         <textarea
@@ -126,13 +196,15 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
           placeholder="What happened? FOMO? Followed your plan?"
         />
       </div>
+
+      {/* Submit */}
       <div className="col-span-2 pt-1">
         <Button type="submit" disabled={loading}>
           {loading ? (
             <>
               <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
               Adding...
             </>
