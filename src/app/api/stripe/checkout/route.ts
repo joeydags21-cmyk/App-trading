@@ -3,10 +3,19 @@ import { stripe } from '@/lib/stripe';
 import { NextResponse } from 'next/server';
 
 export async function POST() {
-  if (!process.env.STRIPE_PRICE_ID) {
+  // Validate STRIPE_PRICE_ID is present and is a real Stripe Price ID (not a raw number)
+  const priceId = process.env.STRIPE_PRICE_ID;
+  if (!priceId) {
     console.error('[POST /api/stripe/checkout] STRIPE_PRICE_ID is not set');
     return NextResponse.json(
-      { error: 'Stripe price is not configured. Add STRIPE_PRICE_ID to your environment variables.' },
+      { error: 'Stripe is not configured. Contact support.' },
+      { status: 500 }
+    );
+  }
+  if (!priceId.startsWith('price_')) {
+    console.error('[POST /api/stripe/checkout] STRIPE_PRICE_ID is invalid — must start with "price_", got:', priceId);
+    return NextResponse.json(
+      { error: 'Invalid Stripe price configuration. STRIPE_PRICE_ID must be a Stripe Price ID (e.g. price_xxx), not a number.' },
       { status: 500 }
     );
   }
@@ -28,19 +37,15 @@ export async function POST() {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID,
+          price: priceId,   // always a valid Stripe Price ID (price_xxx)
           quantity: 1,
         },
       ],
       subscription_data: {
         trial_period_days: 3,
-        metadata: {
-          user_id: user.id,
-        },
+        metadata: { user_id: user.id },
       },
-      metadata: {
-        user_id: user.id,
-      },
+      metadata: { user_id: user.id },
       customer_email: user.email,
       success_url: `${baseUrl}/dashboard?upgraded=true`,
       cancel_url: `${baseUrl}/upgrade?cancelled=true`,
@@ -49,6 +54,9 @@ export async function POST() {
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
     console.error('[POST /api/stripe/checkout] Stripe error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to create checkout session.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Unable to start checkout. Please try again.' },
+      { status: 500 }
+    );
   }
 }
