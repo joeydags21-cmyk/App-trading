@@ -11,14 +11,24 @@ export default function AnalysisPage() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isPro, setIsPro] = useState<boolean | null>(null); // null = loading
+  // Default false (fail-closed): show paywall until confirmed pro
+  const [isPro, setIsPro] = useState<boolean>(false);
+  const [subLoading, setSubLoading] = useState<boolean>(true);
 
   // Check subscription status on mount so paywall shows immediately
   useEffect(() => {
     fetch('/api/subscription')
       .then((r) => r.json())
-      .then((d) => setIsPro(d?.isPro === true))
-      .catch(() => setIsPro(false));
+      .then((d) => {
+        const pro = d?.isPro === true;
+        console.log('USER STATUS:', pro);
+        setIsPro(pro);
+      })
+      .catch(() => {
+        console.log('USER STATUS: false (subscription check failed)');
+        setIsPro(false);
+      })
+      .finally(() => setSubLoading(false));
   }, []);
 
   async function runAnalysis() {
@@ -51,20 +61,8 @@ export default function AnalysisPage() {
     setLoading(false);
   }
 
-  // Still checking subscription
-  if (isPro === null) {
-    return (
-      <div className="flex items-center gap-2 text-zinc-600 text-sm pt-8">
-        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-        Loading...
-      </div>
-    );
-  }
-
-  if (!isPro) return <Paywall />;
+  // Show paywall while checking (fail-closed) and when confirmed non-pro
+  if (subLoading || !isPro) return <Paywall />;
 
   const winProb = analysis?.nextTradePrediction.winProbability ?? 0;
   const winColor = winProb >= 60 ? 'bg-emerald-500' : winProb >= 45 ? 'bg-amber-400' : 'bg-red-500';

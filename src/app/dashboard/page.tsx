@@ -271,8 +271,10 @@ export default function DashboardPage() {
       fetch('/api/trades').then((r) => r.json()),
       fetch('/api/subscription').then((r) => r.json()),
     ]).then(([tradesData, subData]) => {
+      const pro = subData?.isPro === true;
+      console.log('USER STATUS:', pro);
       setTrades(Array.isArray(tradesData) ? tradesData : []);
-      setIsPro(subData?.isPro === true);
+      setIsPro(pro);
     }).finally(() => setLoading(false));
   }, []);
 

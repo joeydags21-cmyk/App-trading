@@ -3,16 +3,30 @@ import { stripe } from '@/lib/stripe';
 import { NextResponse } from 'next/server';
 
 export async function POST() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Guard: Stripe not configured
+  if (!stripe) {
+    console.error('[POST /api/stripe/checkout] STRIPE_SECRET_KEY is not set — Stripe is not configured.');
+    return NextResponse.json(
+      { error: 'Stripe is not configured. Add STRIPE_SECRET_KEY to your environment variables.' },
+      { status: 500 }
+    );
   }
 
   if (!process.env.STRIPE_PRICE_ID) {
     console.error('[POST /api/stripe/checkout] STRIPE_PRICE_ID is not set');
-    return NextResponse.json({ error: 'Stripe is not configured.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Stripe price is not configured. Add STRIPE_PRICE_ID to your environment variables.' },
+      { status: 500 }
+    );
+  }
+
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  console.log('[POST /api/stripe/checkout] User:', user?.id ?? 'not authenticated');
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

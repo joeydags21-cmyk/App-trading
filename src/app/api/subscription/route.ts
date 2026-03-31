@@ -32,6 +32,14 @@ export async function GET() {
       profile.subscription_status === 'active' ||
       profile.subscription_status === 'trialing';
 
+    // Debug: always log subscription state so paywall issues are visible in server logs
+    console.log('[GET /api/subscription] USER STATUS:', {
+      userId: user.id,
+      is_pro: profile.is_pro,
+      subscription_status: profile.subscription_status,
+      isPro,
+    });
+
     return NextResponse.json({ isPro });
   } catch (err) {
     // Any unexpected error → fail closed (not pro)
