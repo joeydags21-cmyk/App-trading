@@ -1,0 +1,53 @@
+export interface Trade {
+  id: string;
+  user_id: string;
+  date: string;
+  ticker: string;
+  direction: 'long' | 'short';
+  entry_price: number;
+  exit_price: number;
+  position_size: number;
+  pnl: number;
+  time_of_day: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface TradeStats {
+  totalPnl: number;
+  winRate: number;
+  avgWin: number;
+  avgLoss: number;
+  bestDay: { date: string; pnl: number } | null;
+  worstDay: { date: string; pnl: number } | null;
+  totalTrades: number;
+  winCount: number;
+  lossCount: number;
+}
+
+export interface Rules {
+  id: string;
+  user_id: string;
+  max_trades_per_day: number | null;
+  max_loss_per_day: number | null;
+  max_position_size: number | null;
+}
+
+export interface AIInsight {
+  type: 'warning' | 'info' | 'critical';
+  title: string;
+  description: string;
+}
+
+export interface AIAnalysis {
+  insights: AIInsight[];
+  nextTradePrediction: {
+    winProbability: number;
+    warnings: string[];
+    summary: string;
+  };
+  rulesAnalysis: {
+    violations: string[];
+    correlations: string[];
+  };
+}
