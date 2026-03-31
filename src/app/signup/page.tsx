@@ -17,9 +17,15 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) { setError(error.message); setLoading(false); }
-    else router.push('/dashboard');
+    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (error) { setError(error.message); setLoading(false); return; }
+    // Show a message so users know to check their email
+    router.push('/signup/verify');
   }
 
   const inputClass = 'w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-zinc-500 transition-all';

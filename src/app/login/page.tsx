@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const verificationFailed = searchParams.get('error') === 'verification_failed';
   const supabase = createClient();
 
   async function handleLogin(e: React.FormEvent) {
@@ -81,6 +83,13 @@ export default function LoginPage() {
             <p className="text-zinc-500 mt-1.5 text-sm">Sign in to your account</p>
           </div>
 
+          {verificationFailed && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5 mb-5">
+              <p className="text-red-400 text-sm font-medium">Verification failed</p>
+              <p className="text-red-400/70 text-sm mt-0.5">The link may have expired. Try signing in or signing up again.</p>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-zinc-400 mb-1.5">Email</label>
@@ -109,5 +118,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
