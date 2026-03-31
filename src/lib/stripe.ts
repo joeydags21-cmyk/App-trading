@@ -1,7 +1,9 @@
 import Stripe from 'stripe';
 
-// Returns null if env var is missing — routes must check before using.
-// Do NOT throw here: a module-level throw cannot be caught by route try/catch blocks.
-export const stripe: Stripe | null = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2025-02-24.acacia' })
-  : null;
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('STRIPE_SECRET_KEY is not set in environment variables.');
+}
+
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: '2026-03-25.dahlia',
+});

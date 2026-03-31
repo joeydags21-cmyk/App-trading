@@ -3,15 +3,6 @@ import { stripe } from '@/lib/stripe';
 import { NextResponse } from 'next/server';
 
 export async function POST() {
-  // Guard: Stripe not configured
-  if (!stripe) {
-    console.error('[POST /api/stripe/checkout] STRIPE_SECRET_KEY is not set — Stripe is not configured.');
-    return NextResponse.json(
-      { error: 'Stripe is not configured. Add STRIPE_SECRET_KEY to your environment variables.' },
-      { status: 500 }
-    );
-  }
-
   if (!process.env.STRIPE_PRICE_ID) {
     console.error('[POST /api/stripe/checkout] STRIPE_PRICE_ID is not set');
     return NextResponse.json(
