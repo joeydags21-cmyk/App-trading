@@ -73,12 +73,12 @@ export default function AnalysisPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">AI Analysis</h1>
           <p className="text-zinc-500 mt-1 text-sm">Scans all your trades and finds the habits costing you money</p>
         </div>
-        <Button onClick={runAnalysis} disabled={loading}>
+        <Button onClick={runAnalysis} disabled={loading} className="sm:flex-shrink-0">
           {loading ? (
             <>
               <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">

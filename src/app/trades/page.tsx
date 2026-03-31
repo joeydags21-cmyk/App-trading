@@ -53,7 +53,7 @@ export default function TradesPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Trades</h1>
           <p className="text-zinc-500 mt-1 text-sm">{trades.length} trades recorded</p>
@@ -61,11 +61,11 @@ export default function TradesPage() {
         <div className="flex gap-3">
           <Link
             href="/trades/import"
-            className="bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
+            className="flex-1 sm:flex-none text-center bg-zinc-800 text-zinc-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
           >
             Import CSV
           </Link>
-          <Button onClick={() => setShowForm(!showForm)} variant={showForm ? 'secondary' : 'primary'}>
+          <Button onClick={() => setShowForm(!showForm)} variant={showForm ? 'secondary' : 'primary'} className="flex-1 sm:flex-none">
             {showForm ? 'Cancel' : '+ Add Trade'}
           </Button>
         </div>

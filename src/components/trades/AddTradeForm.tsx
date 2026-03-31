@@ -86,7 +86,7 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
   const label = 'block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1.5';
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-5">
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
       {/* Error */}
       {error && (
         <div className="col-span-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">

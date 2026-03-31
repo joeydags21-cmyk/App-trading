@@ -375,7 +375,7 @@ export default function DashboardPage() {
       {trades.length > 0 && (
         <>
           {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
             <Card>
               <p className="text-xs font-medium text-zinc-500 mb-1">Total P&L</p>
               <p
@@ -420,7 +420,7 @@ export default function DashboardPage() {
 
           {/* Equity curve */}
           <Card>
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex flex-wrap justify-between items-start gap-3 mb-6">
               <div>
                 <h2 className="text-sm font-semibold text-zinc-200">Equity Curve</h2>
                 <p className="text-xs text-zinc-500 mt-0.5">
@@ -485,22 +485,22 @@ export default function DashboardPage() {
           {/* Quick actions */}
           <Card className="bg-zinc-900/50">
             <p className="text-xs font-medium text-zinc-500 mb-3">More tools</p>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Link
                 href="/analysis"
-                className="bg-white text-zinc-950 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-zinc-100 transition-all"
+                className="text-center bg-white text-zinc-950 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-zinc-100 transition-all"
               >
                 Full AI Analysis
               </Link>
               <Link
                 href="/report"
-                className="bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
+                className="text-center bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
               >
                 Today&apos;s Report
               </Link>
               <Link
                 href="/trades/import"
-                className="bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
+                className="text-center bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
               >
                 Import CSV
               </Link>
