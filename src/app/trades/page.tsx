@@ -21,9 +21,27 @@ export default function TradesPage() {
   }, []);
 
   async function handleAdd(trade: any) {
-    const res = await fetch('/api/trades', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(trade) });
-    const [newTrade] = await res.json();
-    setTrades((t) => [newTrade, ...t]);
+    const res = await fetch('/api/trades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(trade),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error('[TradesPage] Insert failed:', data);
+      throw new Error(data?.error || `Server error (${res.status})`);
+    }
+
+    const inserted = Array.isArray(data) ? data[0] : null;
+    if (!inserted) {
+      console.error('[TradesPage] Insert returned no data:', data);
+      throw new Error('Trade was not saved — no data returned from server.');
+    }
+
+    console.log('[TradesPage] Trade inserted:', inserted);
+    setTrades((t) => [inserted, ...t]);
     setShowForm(false);
   }
 
