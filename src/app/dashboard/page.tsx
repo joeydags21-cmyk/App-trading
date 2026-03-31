@@ -77,13 +77,14 @@ function CoachCard() {
     setError('');
     try {
       const res = await fetch('/api/coach');
-      if (!res.ok) throw new Error('Failed');
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Unable to generate coaching insights right now. Try again.');
       setInsight(data);
-    } catch {
-      setError('Could not load coaching insight. Try again in a moment.');
+    } catch (err: any) {
+      setError(err?.message || 'Unable to generate coaching insights right now. Try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
