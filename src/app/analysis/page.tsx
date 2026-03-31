@@ -16,11 +16,22 @@ export default function AnalysisPage() {
     setError('');
     try {
       const res = await fetch('/api/analysis');
-      if (!res.ok) throw new Error('Analysis failed');
       const data = await res.json();
+
+      // Soft "not enough trades" response — not an error
+      if (data?.error === 'not_enough_trades') {
+        setError(data.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'Analysis failed. Please try again.');
+      }
+
       setAnalysis(data);
-    } catch {
-      setError('Analysis failed. Make sure you have at least a few trades imported and your API key is set up.');
+    } catch (err: any) {
+      setError(err?.message || 'Analysis failed. Make sure you have at least 3 trades and your API key is configured.');
     }
     setLoading(false);
   }

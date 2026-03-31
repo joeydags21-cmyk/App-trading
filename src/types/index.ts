@@ -4,6 +4,8 @@ export interface Trade {
   date: string;
   symbol: string;
   direction: 'long' | 'short';
+  entry_price: number | null;
+  exit_price: number | null;
   pnl: number;
   notes: string | null;
   created_at: string;

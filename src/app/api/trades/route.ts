@@ -35,8 +35,10 @@ export async function POST(req: NextRequest) {
     date: t.date,
     symbol: (t.symbol || t.ticker || '').toString().trim().toUpperCase(),
     direction: t.direction === 'short' ? 'short' : 'long',
+    entry_price: t.entry_price != null && t.entry_price !== '' ? parseFloat(t.entry_price) : null,
+    exit_price: t.exit_price != null && t.exit_price !== '' ? parseFloat(t.exit_price) : null,
     pnl: typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl) || 0,
-    notes: t.notes?.trim() || null,
+    notes: t.notes?.toString().trim() || null,
   }));
 
   console.log('[POST /api/trades] Inserting', inserts.length, 'trade(s) for user', user.id);

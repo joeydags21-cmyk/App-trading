@@ -1,20 +1,30 @@
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
+-- Drop existing tables (clears old schema — run only on fresh setup)
+-- drop table if exists trades cascade;
+-- drop table if exists rules cascade;
+
 -- Trades table
-create table trades (
+create table if not exists trades (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users,
   date text not null,
   symbol text not null,
   direction text not null default 'long' check (direction in ('long', 'short')),
+  entry_price numeric(12,4),
+  exit_price numeric(12,4),
   pnl numeric(12,2) not null,
   notes text,
   created_at timestamptz default now()
 );
 
+-- If the table already exists, add missing columns safely:
+-- alter table trades add column if not exists entry_price numeric(12,4);
+-- alter table trades add column if not exists exit_price numeric(12,4);
+
 -- Rules table
-create table rules (
+create table if not exists rules (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users not null unique,
   max_trades_per_day integer,
@@ -27,6 +37,10 @@ create table rules (
 -- Row Level Security
 alter table trades enable row level security;
 alter table rules enable row level security;
+
+-- Drop existing policies before recreating (avoids duplicate policy error)
+drop policy if exists "Users can manage own trades" on trades;
+drop policy if exists "Users can manage own rules" on rules;
 
 create policy "Users can manage own trades" on trades
   for all using (auth.uid() = user_id);

@@ -12,6 +12,8 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
     date: new Date().toISOString().split('T')[0],
     symbol: '',
     direction: 'long',
+    entry_price: '',
+    exit_price: '',
     pnl: '',
     notes: '',
   });
@@ -28,9 +30,14 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
     setError('');
     setSuccess(false);
 
-    // Validation
     if (!form.date) { setError('Date is required.'); return; }
     if (!form.symbol.trim()) { setError('Symbol is required (e.g. ES, NQ, CL).'); return; }
+    if (form.entry_price === '' || isNaN(parseFloat(form.entry_price))) {
+      setError('Entry price must be a valid number.'); return;
+    }
+    if (form.exit_price === '' || isNaN(parseFloat(form.exit_price))) {
+      setError('Exit price must be a valid number.'); return;
+    }
     if (form.pnl === '' || isNaN(parseFloat(form.pnl))) {
       setError('P&L must be a valid number (e.g. 250 or -150).'); return;
     }
@@ -41,6 +48,8 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
         date: form.date,
         symbol: form.symbol.trim().toUpperCase(),
         direction: form.direction as 'long' | 'short',
+        entry_price: parseFloat(form.entry_price),
+        exit_price: parseFloat(form.exit_price),
         pnl: parseFloat(form.pnl),
         notes: form.notes.trim() || null,
       });
@@ -51,6 +60,8 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
         date: new Date().toISOString().split('T')[0],
         symbol: '',
         direction: 'long',
+        entry_price: '',
+        exit_price: '',
         pnl: '',
         notes: '',
       });
@@ -67,15 +78,12 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-5">
-      {/* Error banner */}
       {error && (
         <div className="col-span-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
           <p className="text-red-400 text-sm font-medium">Error</p>
           <p className="text-red-400/80 text-sm mt-0.5">{error}</p>
         </div>
       )}
-
-      {/* Success banner */}
       {success && (
         <div className="col-span-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3">
           <p className="text-emerald-400 text-sm font-medium">Trade added successfully</p>
@@ -84,47 +92,30 @@ export default function AddTradeForm({ onAdd }: AddTradeFormProps) {
 
       <div>
         <label className={label}>Date</label>
-        <input
-          type="date"
-          required
-          value={form.date}
-          onChange={(e) => set('date', e.target.value)}
-          className={input}
-        />
+        <input type="date" required value={form.date} onChange={(e) => set('date', e.target.value)} className={input} />
       </div>
       <div>
         <label className={label}>Symbol</label>
-        <input
-          type="text"
-          required
-          value={form.symbol}
-          onChange={(e) => set('symbol', e.target.value)}
-          className={input}
-          placeholder="ES, NQ, CL..."
-        />
+        <input type="text" required value={form.symbol} onChange={(e) => set('symbol', e.target.value)} className={input} placeholder="ES, NQ, CL..." />
       </div>
       <div>
         <label className={label}>Direction</label>
-        <select
-          value={form.direction}
-          onChange={(e) => set('direction', e.target.value)}
-          className={input}
-        >
+        <select value={form.direction} onChange={(e) => set('direction', e.target.value)} className={input}>
           <option value="long">Long</option>
           <option value="short">Short</option>
         </select>
       </div>
       <div>
         <label className={label}>P&amp;L ($)</label>
-        <input
-          type="number"
-          required
-          step="0.01"
-          value={form.pnl}
-          onChange={(e) => set('pnl', e.target.value)}
-          className={input}
-          placeholder="-250.00"
-        />
+        <input type="number" required step="0.01" value={form.pnl} onChange={(e) => set('pnl', e.target.value)} className={input} placeholder="-250.00" />
+      </div>
+      <div>
+        <label className={label}>Entry Price</label>
+        <input type="number" required step="0.01" value={form.entry_price} onChange={(e) => set('entry_price', e.target.value)} className={input} placeholder="4800.25" />
+      </div>
+      <div>
+        <label className={label}>Exit Price</label>
+        <input type="number" required step="0.01" value={form.exit_price} onChange={(e) => set('exit_price', e.target.value)} className={input} placeholder="4815.50" />
       </div>
       <div className="col-span-2">
         <label className={label}>Notes (optional)</label>

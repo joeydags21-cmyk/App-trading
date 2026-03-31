@@ -30,34 +30,34 @@ ${rules ? `TRADER'S RULES:
 - Max loss per day: $${rules.max_loss_per_day ?? 'not set'}
 - Max position size: ${rules.max_position_size ?? 'not set'} contracts` : ''}
 
-Return ONLY valid JSON with this exact structure (no markdown, no explanation):
+Return ONLY valid JSON — no markdown fences, no explanation, no text before or after. Use exactly this structure:
 {
   "insights": [
     {
-      "type": "warning|info|critical",
-      "title": "Short insight title",
-      "description": "Plain English description. Use phrases like 'You tend to...', 'Historically, you...', 'Your data shows...'"
+      "type": "warning",
+      "title": "Short title",
+      "description": "Plain English. Use 'You tend to...', 'Your data shows...'"
     }
   ],
   "nextTradePrediction": {
-    "winProbability": <number 0-100 based on recent performance>,
-    "warnings": ["warning string 1", "warning string 2"],
-    "summary": "2-3 sentence summary using language like 'Statistically, you are more likely to...' or 'Based on your recent trades...'"
+    "winProbability": 55,
+    "warnings": ["warning string"],
+    "summary": "2-3 sentence summary."
   },
   "rulesAnalysis": {
     "violations": ["violation description"],
-    "correlations": ["correlation between rule-breaking and losses"]
+    "correlations": ["correlation description"]
   }
 }
 
-Generate 5-8 insights. Focus on:
-- Consecutive loss behavior (revenge trading?)
-- Win/loss ratio analysis
-- Overtrading patterns
-- Symbol-specific performance (which symbols win vs lose?)
-- Daily trade count patterns
+Generate 4-6 insights. Focus on:
+- Consecutive loss patterns (revenge trading risk)
+- Win/loss ratio and whether losses outsize wins
+- Overtrading on losing days
+- Symbol-specific performance
+- Entry vs exit price patterns where available
 
-IMPORTANT: Never claim certainty. Never promise profits. Focus on behavioral patterns only.`;
+Rules: Never claim certainty. Never promise profits. Behavioral patterns only.`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -66,9 +66,19 @@ IMPORTANT: Never claim certainty. Never promise profits. Focus on behavioral pat
   });
 
   const content = message.content[0];
-  if (content.type !== 'text') throw new Error('Unexpected response type');
+  if (content.type !== 'text') throw new Error('Unexpected response type from AI');
 
-  const analysis: AIAnalysis = JSON.parse(content.text);
+  // Strip any accidental markdown fences before parsing
+  const cleaned = content.text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+
+  let analysis: AIAnalysis;
+  try {
+    analysis = JSON.parse(cleaned);
+  } catch {
+    console.error('[analyzeTradesWithAI] Failed to parse AI response:', content.text);
+    throw new Error('AI returned an unexpected format. Please try again.');
+  }
+
   return analysis;
 }
 
@@ -136,7 +146,7 @@ function buildTradeSummary(trades: Trade[]): string {
     }
   });
 
-  // Trades by day count
+  // Trades per day
   const byDate: Record<string, number> = {};
   safeTrades.forEach((t) => { byDate[t.date] = (byDate[t.date] || 0) + 1; });
   const dateValues = Object.values(byDate);
@@ -145,20 +155,27 @@ function buildTradeSummary(trades: Trade[]): string {
     : 0;
   const maxTradesInDay = dateValues.length > 0 ? Math.max(...dateValues) : 0;
 
-  // Symbol breakdown
+  // Symbol P&L breakdown
   const symbolPnl: Record<string, number> = {};
   safeTrades.forEach((t) => {
     symbolPnl[t.symbol] = (symbolPnl[t.symbol] || 0) + t.pnl;
   });
 
+  // Entry/exit price summary (only for trades that have them)
+  const tradesWithPrices = safeTrades.filter(t => t.entry_price != null && t.exit_price != null);
+  const priceSummary = tradesWithPrices.length > 0
+    ? `Trades with entry/exit data: ${tradesWithPrices.length}`
+    : 'No entry/exit price data available';
+
   return `Total trades: ${safeTrades.length}
 Total P&L: $${totalPnl.toFixed(2)}
 Win rate: ${safeTrades.length > 0 ? ((wins.length / safeTrades.length) * 100).toFixed(1) : '0.0'}%
 Avg win: $${avgWin.toFixed(2)} | Avg loss: $${avgLoss.toFixed(2)}
-Win/loss ratio: ${avgLoss !== 0 ? (Math.abs(avgWin / avgLoss)).toFixed(2) : 'N/A'}
+Win/loss ratio: ${avgLoss !== 0 ? Math.abs(avgWin / avgLoss).toFixed(2) : 'N/A'}
 Max consecutive losses: ${maxConsecLosses}
 Avg trades per day: ${avgTradesPerDay.toFixed(1)}
 Max trades in one day: ${maxTradesInDay}
 P&L by symbol: ${JSON.stringify(symbolPnl)}
-Recent 10 trade PnLs (oldest→newest): ${sortedTrades.slice(-10).map(t => t.pnl.toFixed(0)).join(', ')}`;
+${priceSummary}
+Recent 10 trade PnLs (oldest→newest): ${sortedTrades.slice(-10).map(t => `${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(0)}`).join(', ')}`;
 }
