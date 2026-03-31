@@ -22,7 +22,7 @@ export async function POST() {
     );
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   console.log('[POST /api/stripe/checkout] User:', user?.id ?? 'not authenticated');
