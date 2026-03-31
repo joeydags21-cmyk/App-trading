@@ -1,20 +1,28 @@
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Returns true if the current user has an active or trialing subscription.
- * Returns false if unauthenticated, not found, or inactive.
+ * Server-side subscription check.
+ * Returns true if the user has is_pro=true OR an active/trialing status.
+ * Used by API routes to gate premium features.
  */
 export async function isSubscribed(): Promise<boolean> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('subscription_status')
-    .eq('id', user.id)
-    .single();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_pro, subscription_status')
+      .eq('id', user.id)
+      .single();
 
-  const status = profile?.subscription_status;
-  return status === 'active' || status === 'trialing';
+    return (
+      profile?.is_pro === true ||
+      profile?.subscription_status === 'active' ||
+      profile?.subscription_status === 'trialing'
+    );
+  } catch {
+    return false;
+  }
 }

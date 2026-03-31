@@ -26,6 +26,7 @@ create table if not exists profiles (
   stripe_customer_id    text,
   stripe_subscription_id text,
   subscription_status   text not null default 'inactive',
+  is_pro                boolean not null default false,
   created_at            timestamptz default now(),
   updated_at            timestamptz default now()
 );

@@ -3,20 +3,30 @@ import { stripe } from '@/lib/stripe';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
-// Use the service-role client here — webhooks run outside user auth context
+// Service-role client bypasses RLS — required for webhook writes
 function getServiceClient() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Supabase service role credentials are not configured.');
+  }
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 }
 
-async function upsertProfile(userId: string, fields: Record<string, any>) {
+async function setUserPro(userId: string, isPro: boolean, extraFields: Record<string, any> = {}) {
   const supabase = getServiceClient();
   const { error } = await supabase
     .from('profiles')
-    .upsert({ id: userId, ...fields }, { onConflict: 'id' });
-  if (error) console.error('[webhook] upsertProfile error:', error);
+    .upsert(
+      { id: userId, is_pro: isPro, ...extraFields },
+      { onConflict: 'id' }
+    );
+  if (error) {
+    console.error('[webhook] setUserPro error for user', userId, ':', error);
+  } else {
+    console.log('[webhook] Set is_pro =', isPro, 'for user', userId);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -24,6 +34,7 @@ export async function POST(req: NextRequest) {
   const sig = req.headers.get('stripe-signature');
 
   if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error('[webhook] Missing stripe-signature or STRIPE_WEBHOOK_SECRET');
     return NextResponse.json({ error: 'Missing signature or webhook secret' }, { status: 400 });
   }
 
@@ -38,42 +49,49 @@ export async function POST(req: NextRequest) {
   console.log('[webhook] Received event:', event.type);
 
   switch (event.type) {
+    // Fires when checkout completes — grant access immediately
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.user_id;
-      if (!userId) break;
+      if (!userId) { console.warn('[webhook] checkout.session.completed missing user_id'); break; }
 
-      await upsertProfile(userId, {
+      await setUserPro(userId, true, {
         stripe_customer_id: session.customer as string,
         subscription_status: 'active',
       });
       break;
     }
 
-    case 'customer.subscription.updated': {
+    // Fires when subscription changes state (trialing, active, past_due, canceled, etc.)
+    case 'customer.subscription.updated':
+    case 'customer.subscription.created': {
       const sub = event.data.object as Stripe.Subscription;
       const userId = sub.metadata?.user_id;
-      if (!userId) break;
+      if (!userId) { console.warn('[webhook]', event.type, 'missing user_id'); break; }
 
-      const status = sub.status; // 'active' | 'trialing' | 'past_due' | 'canceled' | etc.
-      await upsertProfile(userId, {
+      const isPro = sub.status === 'active' || sub.status === 'trialing';
+      const status = sub.status === 'trialing' ? 'trialing'
+        : sub.status === 'active' ? 'active'
+        : 'inactive';
+
+      await setUserPro(userId, isPro, {
         stripe_subscription_id: sub.id,
-        subscription_status: status === 'trialing' ? 'trialing' : status === 'active' ? 'active' : 'inactive',
+        subscription_status: status,
       });
       break;
     }
 
+    // Fires when subscription is cancelled or expires
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
       const userId = sub.metadata?.user_id;
-      if (!userId) break;
+      if (!userId) { console.warn('[webhook] customer.subscription.deleted missing user_id'); break; }
 
-      await upsertProfile(userId, { subscription_status: 'inactive' });
+      await setUserPro(userId, false, { subscription_status: 'inactive' });
       break;
     }
 
     default:
-      // Ignore all other events
       break;
   }
 

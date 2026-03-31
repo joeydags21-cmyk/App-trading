@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import EquityCurve from '@/components/charts/EquityCurve';
 import Link from 'next/link';
-import Paywall from '@/components/Paywall';
+import LockedFeature from '@/components/LockedFeature';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -68,11 +68,10 @@ function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
 
 // ─── Coach Card ───────────────────────────────────────────────────────────────
 
-function CoachCard() {
+function CoachCard({ isPro }: { isPro: boolean }) {
   const [insight, setInsight] = useState<CoachInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [paywalled, setPaywalled] = useState(false);
 
   async function getInsight() {
     setLoading(true);
@@ -80,7 +79,6 @@ function CoachCard() {
     try {
       const res = await fetch('/api/coach');
       const data = await res.json();
-      if (res.status === 403) { setPaywalled(true); return; }
       if (!res.ok) throw new Error(data?.error || 'Unable to generate coaching insights right now. Try again.');
       setInsight(data);
     } catch (err: any) {
@@ -90,7 +88,24 @@ function CoachCard() {
     }
   }
 
-  if (paywalled) return <Paywall />;
+  // Show locked state immediately if not subscribed — no click required
+  if (!isPro) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2.5 mb-1">
+          <div className="w-7 h-7 bg-violet-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z" stroke="#a78bfa" strokeWidth="1.2" />
+              <path d="M5.5 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.5-1.2 1.8L8 8.5V10" stroke="#a78bfa" strokeWidth="1.2" strokeLinecap="round" />
+              <circle cx="8" cy="11.5" r=".6" fill="#a78bfa" />
+            </svg>
+          </div>
+          <h2 className="text-sm font-semibold text-zinc-200">Trading Coach</h2>
+        </div>
+        <LockedFeature label="Trading Coach" />
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -249,12 +264,16 @@ function PatternsCard({ trades }: { trades: Trade[] }) {
 export default function DashboardPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
-    fetch('/api/trades')
-      .then((r) => r.json())
-      .then((data) => setTrades(Array.isArray(data) ? data : []))
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch('/api/trades').then((r) => r.json()),
+      fetch('/api/subscription').then((r) => r.json()),
+    ]).then(([tradesData, subData]) => {
+      setTrades(Array.isArray(tradesData) ? tradesData : []);
+      setIsPro(subData?.isPro === true);
+    }).finally(() => setLoading(false));
   }, []);
 
   const stats = computeStats(trades);
@@ -395,7 +414,7 @@ export default function DashboardPage() {
 
           {/* Coach + Patterns side by side on wider screens */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <CoachCard />
+            <CoachCard isPro={isPro} />
             <PatternsCard trades={trades} />
           </div>
 

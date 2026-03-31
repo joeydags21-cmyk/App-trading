@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AIAnalysis } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +11,15 @@ export default function AnalysisPage() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [paywalled, setPaywalled] = useState(false);
+  const [isPro, setIsPro] = useState<boolean | null>(null); // null = loading
+
+  // Check subscription status on mount so paywall shows immediately
+  useEffect(() => {
+    fetch('/api/subscription')
+      .then((r) => r.json())
+      .then((d) => setIsPro(d?.isPro === true))
+      .catch(() => setIsPro(false));
+  }, []);
 
   async function runAnalysis() {
     setLoading(true);
@@ -21,7 +29,7 @@ export default function AnalysisPage() {
       const data = await res.json();
 
       if (res.status === 403) {
-        setPaywalled(true);
+        setIsPro(false);
         setLoading(false);
         return;
       }
@@ -43,7 +51,20 @@ export default function AnalysisPage() {
     setLoading(false);
   }
 
-  if (paywalled) return <Paywall />;
+  // Still checking subscription
+  if (isPro === null) {
+    return (
+      <div className="flex items-center gap-2 text-zinc-600 text-sm pt-8">
+        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!isPro) return <Paywall />;
 
   const winProb = analysis?.nextTradePrediction.winProbability ?? 0;
   const winColor = winProb >= 60 ? 'bg-emerald-500' : winProb >= 45 ? 'bg-amber-400' : 'bg-red-500';
