@@ -12,7 +12,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
       <Sidebar />
       {/* md:ml-56 = offset for desktop sidebar; pt-14 = offset for mobile top bar */}
       <main className="flex-1 min-h-screen md:ml-56 pt-14 md:pt-0">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 md:px-8 py-6 md:py-10">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pt-6 pb-28 md:py-10">
           {children}
         </div>
       </main>

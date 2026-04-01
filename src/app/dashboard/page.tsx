@@ -531,19 +531,20 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
 
-      {/* ── Page header + Add Trade ── */}
+      {/* ── Page header ── */}
       <FadeUp>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Dashboard</h1>
             <p className="text-zinc-500 text-sm mt-0.5">
               {trades.length === 0 ? 'Welcome — get started below' : 'Your trading performance at a glance'}
             </p>
           </div>
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+          {/* Desktop Add Trade button — bottom nav FAB handles mobile */}
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="hidden sm:block">
             <Link
               href="/trades"
-              className="flex items-center justify-center gap-2 bg-white text-zinc-950 font-semibold px-5 py-2.5 rounded-xl hover:bg-zinc-100 transition-all text-sm w-full sm:w-auto"
+              className="flex items-center gap-2 bg-white text-zinc-950 font-semibold px-5 py-2.5 rounded-xl hover:bg-zinc-100 transition-all text-sm"
             >
               <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
                 <path d="M7.5 1v13M1 7.5h13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -553,6 +554,21 @@ export default function DashboardPage() {
           </motion.div>
         </div>
       </FadeUp>
+
+      {/* ── Mobile Add Trade CTA (full-width, thumb-friendly) ── */}
+      {trades.length > 0 && (
+        <motion.div className="sm:hidden" whileTap={{ scale: 0.97 }}>
+          <Link
+            href="/trades"
+            className="flex items-center justify-center gap-2.5 w-full bg-white text-zinc-950 font-semibold py-4 rounded-2xl text-base shadow-[0_2px_16px_rgba(255,255,255,0.08)]"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1v13M1 7.5h13" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+            </svg>
+            Add Trade
+          </Link>
+        </motion.div>
+      )}
 
       {/* ── Checkout banners ── */}
       <AnimatePresence>
@@ -597,46 +613,49 @@ export default function DashboardPage() {
       {/* ── With trades ── */}
       {trades.length > 0 && (
         <>
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard
-              label="Total P&L"
-              value={fmt(stats.totalPnl)}
-              sub={`${stats.totalTrades} trades`}
-              valueClass={stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
-              delay={0}
-            />
-            <StatCard
-              label="Win Rate"
-              value={`${stats.winRate.toFixed(1)}%`}
-              sub={`${stats.winCount}W / ${stats.lossCount}L`}
-              delay={0.05}
-            />
-            <StatCard
-              label="Avg Win"
-              value={`$${stats.avgWin.toFixed(2)}`}
-              sub="per winning trade"
-              valueClass="text-emerald-400"
-              delay={0.1}
-            />
-            <StatCard
-              label="Avg Loss"
-              value={`$${stats.avgLoss.toFixed(2)}`}
-              sub="per losing trade"
-              valueClass="text-red-400"
-              delay={0.15}
-            />
-          </div>
+          {/* flex-col container so CSS order works for mobile reordering */}
+          <div className="flex flex-col gap-4 md:gap-6">
 
-          {/* Coach + Patterns */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <FadeUp delay={0.05}>
-              <CoachCard isPro={isPro} />
-            </FadeUp>
-            <FadeUp delay={0.1}>
-              <PatternsCard trades={trades} />
-            </FadeUp>
-          </div>
+            {/* Coach + Patterns — order-1 on mobile (FIRST), md:order-2 on desktop (after stats) */}
+            <div className="order-1 md:order-2 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <FadeUp delay={0.05}>
+                <CoachCard isPro={isPro} />
+              </FadeUp>
+              <FadeUp delay={0.1}>
+                <PatternsCard trades={trades} />
+              </FadeUp>
+            </div>
+
+            {/* Stats — order-2 on mobile (below coach), md:order-1 on desktop (first) */}
+            <div className="order-2 md:order-1 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                label="Total P&L"
+                value={fmt(stats.totalPnl)}
+                sub={`${stats.totalTrades} trades`}
+                valueClass={stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
+                delay={0}
+              />
+              <StatCard
+                label="Win Rate"
+                value={`${stats.winRate.toFixed(1)}%`}
+                sub={`${stats.winCount}W / ${stats.lossCount}L`}
+                delay={0.05}
+              />
+              <StatCard
+                label="Avg Win"
+                value={`$${stats.avgWin.toFixed(2)}`}
+                sub="per winning trade"
+                valueClass="text-emerald-400"
+                delay={0.1}
+              />
+              <StatCard
+                label="Avg Loss"
+                value={`$${stats.avgLoss.toFixed(2)}`}
+                sub="per losing trade"
+                valueClass="text-red-400"
+                delay={0.15}
+              />
+            </div>
 
           {/* Equity curve */}
           <FadeUp>
@@ -721,6 +740,8 @@ export default function DashboardPage() {
               </div>
             </div>
           </FadeUp>
+
+          </div>{/* end flex-col */}
         </>
       )}
     </div>

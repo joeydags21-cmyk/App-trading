@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
 
 const navItems = [
@@ -28,7 +29,7 @@ const navItems = [
   },
   {
     href: '/analysis',
-    label: 'AI Analysis',
+    label: 'AI Coach',
     hint: 'Find your mistake patterns',
     icon: (
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -55,6 +56,56 @@ const navItems = [
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
         <rect x="2" y="1.5" width="11" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
         <path d="M5 5h5M5 8h5M5 11h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+];
+
+// Bottom nav tabs (4 visible, "Profile/More" opens drawer)
+const bottomTabs = [
+  {
+    href: '/dashboard',
+    label: 'Home',
+    matchPrefix: false,
+    icon: (active: boolean) => (
+      <svg width="20" height="20" viewBox="0 0 15 15" fill="none">
+        <path
+          d="M2 2h4v4H2V2zm7 0h4v4H9V2zm-7 7h4v4H2V9zm7 0h4v4H9V9z"
+          fill="currentColor"
+          fillOpacity={active ? '1' : '0.5'}
+        />
+      </svg>
+    ),
+  },
+  {
+    href: '/trades',
+    label: 'Trades',
+    matchPrefix: true,
+    icon: (active: boolean) => (
+      <svg width="20" height="20" viewBox="0 0 15 15" fill="none">
+        <path
+          d="M1 3h13M1 7.5h13M1 12h13"
+          stroke="currentColor"
+          strokeWidth={active ? '1.8' : '1.3'}
+          strokeLinecap="round"
+          strokeOpacity={active ? '1' : '0.5'}
+        />
+      </svg>
+    ),
+  },
+  {
+    href: '/analysis',
+    label: 'AI Coach',
+    matchPrefix: false,
+    icon: (active: boolean) => (
+      <svg width="20" height="20" viewBox="0 0 15 15" fill="none">
+        <path
+          d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z"
+          stroke="currentColor"
+          strokeWidth={active ? '1.5' : '1.1'}
+          strokeLinejoin="round"
+          strokeOpacity={active ? '1' : '0.5'}
+        />
       </svg>
     ),
   },
@@ -134,8 +185,8 @@ export default function Sidebar() {
       </aside>
 
       {/* ── Mobile top bar ───────────────────────────────────── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-zinc-950 border-b border-zinc-800/60 flex items-center justify-between px-4 h-14">
-        <div className="flex items-center gap-2">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/60 flex items-center justify-between px-4 h-14">
+        <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
             <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
               <path d="M2 12L6 7L9 10L13 4" stroke="#09090b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -143,29 +194,142 @@ export default function Sidebar() {
           </div>
           <span className="font-semibold text-zinc-100 text-sm">Futures Edge AI</span>
         </div>
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 transition-all"
-          aria-label="Open menu"
-        >
-          <svg width="18" height="18" viewBox="0 0 15 15" fill="none">
-            <path d="M2 4h11M2 7.5h11M2 11h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </button>
+        {/* Page context hint — subtle, no hamburger */}
+        <span className="text-xs text-zinc-600 capitalize">
+          {pathname.split('/')[1] || 'dashboard'}
+        </span>
       </div>
 
+      {/* ── Mobile bottom nav ────────────────────────────────── */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/60"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="flex items-center h-16 px-1">
+
+          {/* Home, Trades */}
+          {bottomTabs.slice(0, 2).map((tab) => {
+            const active = tab.matchPrefix
+              ? pathname.startsWith(tab.href)
+              : pathname === tab.href;
+            return (
+              <motion.div
+                key={tab.href}
+                whileTap={{ scale: 0.85 }}
+                className="flex-1"
+              >
+                <Link
+                  href={tab.href}
+                  className="flex flex-col items-center justify-center gap-1 py-2 w-full"
+                >
+                  <span className={active ? 'text-white' : 'text-zinc-500'}>
+                    {tab.icon(active)}
+                  </span>
+                  <span
+                    className={`text-[10px] font-medium leading-none tracking-wide ${
+                      active ? 'text-white' : 'text-zinc-600'
+                    }`}
+                  >
+                    {tab.label}
+                  </span>
+                </Link>
+              </motion.div>
+            );
+          })}
+
+          {/* Center — Add Trade FAB */}
+          <div className="flex-1 flex justify-center items-center">
+            <motion.div whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}>
+              <Link
+                href="/trades"
+                className="w-14 h-14 bg-white rounded-2xl flex flex-col items-center justify-center shadow-[0_4px_24px_rgba(255,255,255,0.15)] -mt-5 border-4 border-zinc-950 gap-0.5"
+                aria-label="Add Trade"
+              >
+                <svg width="18" height="18" viewBox="0 0 15 15" fill="none">
+                  <path d="M7.5 1v13M1 7.5h13" stroke="#09090b" strokeWidth="2.2" strokeLinecap="round"/>
+                </svg>
+                <span className="text-[8px] font-bold text-zinc-800 leading-none tracking-wide uppercase">Add</span>
+              </Link>
+            </motion.div>
+          </div>
+
+          {/* AI Coach */}
+          {bottomTabs.slice(2).map((tab) => {
+            const active = tab.matchPrefix
+              ? pathname.startsWith(tab.href)
+              : pathname === tab.href;
+            return (
+              <motion.div
+                key={tab.href}
+                whileTap={{ scale: 0.85 }}
+                className="flex-1"
+              >
+                <Link
+                  href={tab.href}
+                  className="flex flex-col items-center justify-center gap-1 py-2 w-full"
+                >
+                  <span className={active ? 'text-white' : 'text-zinc-500'}>
+                    {tab.icon(active)}
+                  </span>
+                  <span
+                    className={`text-[10px] font-medium leading-none tracking-wide ${
+                      active ? 'text-white' : 'text-zinc-600'
+                    }`}
+                  >
+                    {tab.label}
+                  </span>
+                </Link>
+              </motion.div>
+            );
+          })}
+
+          {/* More / Profile */}
+          <motion.div whileTap={{ scale: 0.85 }} className="flex-1">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="flex flex-col items-center justify-center gap-1 py-2 w-full"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 15 15"
+                fill="none"
+                className="text-zinc-500"
+              >
+                <circle cx="7.5" cy="3" r="1" fill="currentColor"/>
+                <circle cx="7.5" cy="7.5" r="1" fill="currentColor"/>
+                <circle cx="7.5" cy="12" r="1" fill="currentColor"/>
+              </svg>
+              <span className="text-[10px] font-medium leading-none tracking-wide text-zinc-600">
+                More
+              </span>
+            </button>
+          </motion.div>
+
+        </div>
+      </nav>
+
       {/* ── Mobile drawer overlay ────────────────────────────── */}
-      {mobileOpen && (
-        <div
-          className="md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            key="overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="md:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Mobile drawer panel ──────────────────────────────── */}
-      <div className={`md:hidden fixed top-0 left-0 h-full w-72 z-50 bg-zinc-950 border-r border-zinc-800/60 flex flex-col transform transition-transform duration-200 ease-out ${
-        mobileOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <div
+        className={`md:hidden fixed top-0 left-0 h-full w-72 z-50 bg-zinc-950 border-r border-zinc-800/60 flex flex-col transform transition-transform duration-250 ease-out ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         {/* Drawer header */}
         <div className="px-5 py-5 border-b border-zinc-800/40 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
