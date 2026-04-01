@@ -38,12 +38,12 @@ export interface AIInsight {
 }
 
 export interface AIAnalysis {
-  insights: AIInsight[];
-  nextTradePrediction: {
-    winProbability: number;
-    warnings: string[];
-    summary: string;
-  };
+  edge: string;
+  biggestLeak: string;
+  nextTradeFocus: string;
+  confidence: number;
+  winProbability: number;
+  warnings: string[];
   rulesAnalysis: {
     violations: string[];
     correlations: string[];

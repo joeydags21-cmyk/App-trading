@@ -12,55 +12,43 @@ export async function analyzeTradesWithAI(trades: Trade[], rules?: {
 
   if (safeTrades.length === 0) {
     return {
-      insights: [{ type: 'info', title: 'No trades yet', description: 'Import or add trades to get AI analysis.' }],
-      nextTradePrediction: { winProbability: 50, warnings: [], summary: 'Not enough data for prediction.' },
+      edge: 'Add trades to get coaching insights.',
+      biggestLeak: 'No data yet — log your trades to see what\'s costing you money.',
+      nextTradeFocus: 'Start by logging at least 3 trades.',
+      confidence: 0,
+      winProbability: 50,
+      warnings: [],
       rulesAnalysis: { violations: [], correlations: [] },
     };
   }
 
   const { statsBlock, winRate, winProb } = buildTradeSummary(safeTrades, rules);
 
-  const prompt = `You are a trading performance coach reviewing a futures trader's full trade history. You have their real numbers. Give direct, specific feedback that references actual figures from their data.
+  const prompt = `You are an elite futures trading coach. You have this trader's real numbers. Deliver three focused coaching insights — direct, specific, no fluff.
 
 TRADER DATA:
 ${statsBlock}
 
-INSTRUCTIONS:
-- Speak directly: "You", not "the trader" or "one might notice"
-- Every insight must cite a specific number from the data
-- Never use phrases like "based on your data", "it appears", "it is important to", or "ensure that"
-- Be honest and direct. If something is costing them money, name it plainly
-- Insights should read like a coach talking, not a financial report
-- Do NOT repeat the same point in multiple insights
+RULES:
+- Start every field with "You" or a specific number — never "It seems", "Based on", or "It appears"
+- Every sentence must cite at least one real number from the data
+- Be direct and confident: name problems plainly without softening language
+- Each field is 1-2 sentences maximum — no padding, no repetition
+- confidence: integer 50–95 reflecting how clearly the data supports these patterns (higher = more trades, clearer signal)
 
-Return ONLY valid JSON — no markdown fences, no text outside the JSON:
+Return ONLY valid JSON — no markdown fences, no extra text:
 {
-  "insights": [
-    {
-      "type": "warning|info|critical",
-      "title": "Short title (5 words max)",
-      "description": "Direct, specific observation using exact numbers. 1-2 sentences. Start with 'You' or the specific number."
-    }
-  ],
-  "nextTradePrediction": {
-    "winProbability": ${winProb},
-    "warnings": ["One-sentence warning if there is a genuine risk flag, otherwise empty array"],
-    "summary": "2 sentences max. Reference their recent trend specifically. Start with a number or 'You'."
-  },
+  "edge": "1-2 sentences. What this trader consistently does well. Start with 'You' or a number. Cite a specific figure.",
+  "biggestLeak": "1-2 sentences. The single biggest pattern costing them money right now. Name it plainly with exact figures.",
+  "nextTradeFocus": "1-2 sentences. One specific, immediately actionable change for their very next trade. Concrete, not generic.",
+  "confidence": <integer 50-95>,
+  "winProbability": ${winProb},
+  "warnings": ["One sentence per genuine risk flag (revenge trading, overtrading, drawdown). Max 2. Empty array if none."],
   "rulesAnalysis": {
-    "violations": ["If rules were set and broken, name the violation with the number. Otherwise empty array."],
-    "correlations": ["If rule-breaking correlates with losses, state it directly with numbers. Otherwise empty array."]
+    "violations": ["If rules were set and broken, name the violation with the number. Empty array if no rules or no violations."],
+    "correlations": ["If rule-breaking correlates with losses, state it with numbers. Empty array otherwise."]
   }
-}
-
-Generate exactly 5 insights. Cover these areas — pick whichever 5 are most supported by the data:
-1. Win rate context (is it strong, weak, or misleading given P&L?)
-2. Risk/reward (are wins bigger or smaller than losses?)
-3. Consecutive loss behavior (revenge trading pattern?)
-4. Volume patterns (overtrading on bad days?)
-5. Direction bias (longs vs shorts — which performs better?)
-6. Symbol concentration (if one symbol is dragging down results)
-7. Recent momentum (last 5 trades tell a story)`;
+}`;
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
