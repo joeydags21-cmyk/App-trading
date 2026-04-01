@@ -7,6 +7,7 @@ import { Trade } from '@/types';
 import { computeStats, buildEquityCurve } from '@/lib/trade-stats';
 import { detectPatterns } from '@/lib/patterns';
 import EquityCurve from '@/components/charts/EquityCurve';
+import GoalTracker from '@/components/GoalTracker';
 import Link from 'next/link';
 import LockedFeature from '@/components/LockedFeature';
 
@@ -758,6 +759,9 @@ export default function DashboardPage() {
 
           {/* Today's Trading Brief — always first */}
           <TradingBrief trades={trades} />
+
+          {/* Monthly Goal Tracker — free for all users */}
+          <GoalTracker trades={trades} />
 
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
