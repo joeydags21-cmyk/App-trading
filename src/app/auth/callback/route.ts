@@ -11,7 +11,8 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/dashboard';
+  // New users land on onboarding; existing sessions (password reset etc.) use ?next=
+  const next = searchParams.get('next') ?? '/onboarding';
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin;
 

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Trade } from '@/types';
 import { computeStats, buildEquityCurve } from '@/lib/trade-stats';
 import { detectPatterns, PatternResult } from '@/lib/patterns';
@@ -262,6 +263,7 @@ function PatternsCard({ trades }: { trades: Trade[] }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPro, setIsPro] = useState(false);
@@ -307,12 +309,18 @@ export default function DashboardPage() {
         pro = await fetchSubscription();
       }
 
-      const [tradesData] = await Promise.all([
-        fetch('/api/trades').then((r) => r.json()),
-      ]);
+      const tradesData = await fetch('/api/trades').then((r) => r.json());
+      const tradeList = Array.isArray(tradesData) ? tradesData : [];
+
+      // Redirect new users to onboarding if they haven't completed it and have no trades
+      const onboardingDone = (() => { try { return !!localStorage.getItem('onboarding_complete'); } catch { return true; } })();
+      if (!onboardingDone && tradeList.length === 0 && checkoutStatus !== 'success') {
+        router.replace('/onboarding');
+        return;
+      }
 
       console.log('USER STATUS:', pro);
-      setTrades(Array.isArray(tradesData) ? tradesData : []);
+      setTrades(tradeList);
       setIsPro(pro);
       setLoading(false);
     }
