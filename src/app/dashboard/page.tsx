@@ -1,60 +1,85 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, useInView, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { Trade } from '@/types';
 import { computeStats, buildEquityCurve } from '@/lib/trade-stats';
 import { detectPatterns, PatternResult } from '@/lib/patterns';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import EquityCurve from '@/components/charts/EquityCurve';
 import Link from 'next/link';
 import LockedFeature from '@/components/LockedFeature';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Animation primitives ─────────────────────────────────────────────────────
 
-interface CoachInsight {
-  empty: boolean;
-  message?: string;
-  strength?: string;
-  weakness?: string;
-  suggestion?: string;
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+function FadeUp({
+  children,
+  delay = 0,
+  className = '',
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+}) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      initial={{ opacity: 0, y: reduce ? 0 : 16 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.5, delay, ease: EASE }}
+    >
+      {children}
+    </motion.div>
+  );
 }
 
-// ─── Onboarding steps (shown when no trades) ─────────────────────────────────
+function HoverCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      whileHover={reduce ? {} : { y: -3, boxShadow: '0 16px 48px -8px rgba(0,0,0,0.6)' }}
+      transition={{ duration: 0.18 }}
+      className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-5 ${className}`}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
-const STEPS = [
-  {
-    num: '1',
-    title: 'Add your trades',
-    desc: 'Log trades manually or upload a CSV from your broker. No trades = no insights.',
-    href: '/trades',
-    cta: 'Add trades →',
-    altHref: '/trades/import',
-    altCta: 'Import CSV',
-  },
-  {
-    num: '2',
-    title: 'Set your trading rules',
-    desc: 'Tell the app your limits (e.g. max 5 trades/day, max $500 loss/day). AI will check if you break them.',
-    href: '/rules',
-    cta: 'Set rules →',
-  },
-  {
-    num: '3',
-    title: 'Run AI Analysis',
-    desc: 'AI scans all your trades and tells you exactly which habits are costing you money — in plain English.',
-    href: '/analysis',
-    cta: 'Run analysis →',
-  },
-  {
-    num: '4',
-    title: 'Get your Daily Report',
-    desc: 'At the end of each trading day, generate a report: 3 mistakes and 3 things you did well.',
-    href: '/report',
-    cta: 'Open report →',
-  },
-];
+// ─── Shimmer skeleton ─────────────────────────────────────────────────────────
+
+function Shimmer({ className = '' }: { className?: string }) {
+  return (
+    <div className={`rounded-lg bg-zinc-800 animate-pulse ${className}`} />
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-2">
+            <Shimmer className="h-3 w-16" />
+            <Shimmer className="h-7 w-24" />
+            <Shimmer className="h-3 w-12" />
+          </div>
+        ))}
+      </div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-3">
+        <Shimmer className="h-4 w-32" />
+        <Shimmer className="h-20 w-full" />
+        <Shimmer className="h-20 w-full" />
+      </div>
+    </div>
+  );
+}
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +92,41 @@ function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
+// ─── Stat card ────────────────────────────────────────────────────────────────
+
+function StatCard({
+  label,
+  value,
+  sub,
+  valueClass = 'text-zinc-100',
+  delay = 0,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  valueClass?: string;
+  delay?: number;
+}) {
+  return (
+    <FadeUp delay={delay}>
+      <HoverCard>
+        <p className="text-xs font-medium text-zinc-500 mb-1.5 uppercase tracking-wide">{label}</p>
+        <p className={`text-2xl font-bold tracking-tight ${valueClass}`}>{value}</p>
+        <p className="text-xs text-zinc-600 mt-1.5">{sub}</p>
+      </HoverCard>
+    </FadeUp>
+  );
+}
+
 // ─── Coach Card ───────────────────────────────────────────────────────────────
+
+interface CoachInsight {
+  empty: boolean;
+  message?: string;
+  strength?: string;
+  weakness?: string;
+  suggestion?: string;
+}
 
 function CoachCard({ isPro }: { isPro: boolean }) {
   const [insight, setInsight] = useState<CoachInsight | null>(null);
@@ -80,53 +139,42 @@ function CoachCard({ isPro }: { isPro: boolean }) {
     try {
       const res = await fetch('/api/coach');
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Unable to generate coaching insights right now. Try again.');
+      if (!res.ok) throw new Error(data?.error || 'Unable to generate coaching insights right now.');
       setInsight(data);
     } catch (err: any) {
-      setError(err?.message || 'Unable to generate coaching insights right now. Try again.');
+      setError(err?.message || 'Unable to generate coaching insights right now.');
     } finally {
       setLoading(false);
     }
   }
 
-  // Show locked state immediately if not subscribed — no click required
   if (!isPro) {
     return (
-      <Card>
+      <HoverCard>
         <div className="flex items-center gap-2.5 mb-1">
-          <div className="w-7 h-7 bg-violet-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-              <path d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z" stroke="#a78bfa" strokeWidth="1.2" />
-              <path d="M5.5 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.5-1.2 1.8L8 8.5V10" stroke="#a78bfa" strokeWidth="1.2" strokeLinecap="round" />
-              <circle cx="8" cy="11.5" r=".6" fill="#a78bfa" />
+          <div className="w-7 h-7 bg-violet-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z" stroke="#a78bfa" strokeWidth="1.2"/>
+              <path d="M5.5 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.5-1.2 1.8L8 8.5V10" stroke="#a78bfa" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="8" cy="11.5" r=".6" fill="#a78bfa"/>
             </svg>
           </div>
           <h2 className="text-sm font-semibold text-zinc-200">Trading Coach</h2>
         </div>
         <LockedFeature label="Trading Coach" />
-      </Card>
+      </HoverCard>
     );
   }
 
   return (
-    <Card>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
+    <HoverCard>
+      <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-violet-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-              <path
-                d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z"
-                stroke="#a78bfa"
-                strokeWidth="1.2"
-              />
-              <path
-                d="M5.5 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.5-1.2 1.8L8 8.5V10"
-                stroke="#a78bfa"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-              <circle cx="8" cy="11.5" r=".6" fill="#a78bfa" />
+          <div className="w-7 h-7 bg-violet-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z" stroke="#a78bfa" strokeWidth="1.2"/>
+              <path d="M5.5 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.5-1.2 1.8L8 8.5V10" stroke="#a78bfa" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="8" cy="11.5" r=".6" fill="#a78bfa"/>
             </svg>
           </div>
           <div>
@@ -134,58 +182,61 @@ function CoachCard({ isPro }: { isPro: boolean }) {
             <p className="text-xs text-zinc-600">One-click personalised feedback</p>
           </div>
         </div>
-        {!loading && (
-          <Button size="sm" onClick={getInsight}>
-            {insight ? 'Refresh' : 'Get Insight'}
-          </Button>
-        )}
-        {loading && (
+        {loading ? (
           <div className="flex items-center gap-2 text-zinc-500 text-xs">
-            <Spinner className="w-3.5 h-3.5" />
-            Thinking...
+            <Spinner className="w-3.5 h-3.5" /> Analyzing...
           </div>
+        ) : (
+          <motion.button
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={getInsight}
+            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-700 transition-colors"
+          >
+            {insight ? 'Refresh' : 'Get Insight'}
+          </motion.button>
         )}
       </div>
 
-      {/* Error */}
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
-      {/* Empty state */}
       {!insight && !loading && !error && (
         <p className="text-sm text-zinc-600">
-          Click <span className="text-zinc-400 font-medium">Get Insight</span> for one strength, one weakness, and one thing to focus on for your next trade.
+          Click <span className="text-zinc-400 font-medium">Get Insight</span> for one strength, one weakness, and one focus for your next trade.
         </p>
       )}
 
-      {/* Empty trades message */}
-      {insight?.empty && (
-        <p className="text-sm text-zinc-500">{insight.message}</p>
-      )}
+      {insight?.empty && <p className="text-sm text-zinc-500">{insight.message}</p>}
 
-      {/* Insight result */}
-      {insight && !insight.empty && (
-        <div className="space-y-3 mt-1">
-          <div className="flex gap-3 items-start p-3.5 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
-            <span className="text-emerald-400 text-xs font-semibold uppercase tracking-wide w-20 flex-shrink-0 mt-0.5">
-              Strength
-            </span>
-            <p className="text-sm text-zinc-300 leading-relaxed">{insight.strength}</p>
-          </div>
-          <div className="flex gap-3 items-start p-3.5 bg-red-500/5 rounded-lg border border-red-500/10">
-            <span className="text-red-400 text-xs font-semibold uppercase tracking-wide w-20 flex-shrink-0 mt-0.5">
-              Weakness
-            </span>
-            <p className="text-sm text-zinc-300 leading-relaxed">{insight.weakness}</p>
-          </div>
-          <div className="flex gap-3 items-start p-3.5 bg-violet-500/5 rounded-lg border border-violet-500/10">
-            <span className="text-violet-400 text-xs font-semibold uppercase tracking-wide w-20 flex-shrink-0 mt-0.5">
-              Next trade
-            </span>
-            <p className="text-sm text-zinc-300 leading-relaxed">{insight.suggestion}</p>
-          </div>
-        </div>
-      )}
-    </Card>
+      <AnimatePresence>
+        {insight && !insight.empty && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="space-y-3"
+          >
+            {[
+              { label: 'Strength', text: insight.strength, color: 'emerald' },
+              { label: 'Weakness', text: insight.weakness, color: 'red' },
+              { label: 'Next trade', text: insight.suggestion, color: 'violet' },
+            ].map(({ label, text, color }) => {
+              const styles: Record<string, string> = {
+                emerald: 'bg-emerald-500/5 border-emerald-500/15 text-emerald-400',
+                red: 'bg-red-500/5 border-red-500/15 text-red-400',
+                violet: 'bg-violet-500/5 border-violet-500/15 text-violet-400',
+              };
+              return (
+                <div key={label} className={`flex gap-3 items-start p-4 rounded-xl border ${styles[color].split(' ').slice(0,2).join(' ')}`}>
+                  <span className={`text-xs font-semibold uppercase tracking-wide w-20 flex-shrink-0 mt-0.5 ${styles[color].split(' ')[2]}`}>{label}</span>
+                  <p className="text-sm text-zinc-300 leading-relaxed">{text}</p>
+                </div>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </HoverCard>
   );
 }
 
@@ -193,70 +244,210 @@ function CoachCard({ isPro }: { isPro: boolean }) {
 
 function PatternsCard({ trades }: { trades: Trade[] }) {
   const result: PatternResult = detectPatterns(trades);
-
   return (
-    <Card>
-      {/* Header */}
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-7 h-7 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-          <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-            <path
-              d="M2 12L5.5 7.5L8.5 10L11 6.5L13 8.5"
-              stroke="#fbbf24"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="2" cy="12" r="1" fill="#fbbf24" />
-            <circle cx="13" cy="8.5" r="1" fill="#fbbf24" />
+    <HoverCard>
+      <div className="flex items-center gap-2.5 mb-5">
+        <div className="w-7 h-7 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+          <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+            <path d="M2 12L5.5 7.5L8.5 10L11 6.5L13 8.5" stroke="#fbbf24" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="2" cy="12" r="1" fill="#fbbf24"/>
+            <circle cx="13" cy="8.5" r="1" fill="#fbbf24"/>
           </svg>
         </div>
         <div>
           <h2 className="text-sm font-semibold text-zinc-200">Patterns</h2>
-          <p className="text-xs text-zinc-600">Detected from your trade history</p>
+          <p className="text-xs text-zinc-600">Detected from your history</p>
         </div>
       </div>
 
-      {/* No patterns yet */}
       {result.patterns.length === 0 && (
         <p className="text-sm text-zinc-600 mb-4">{result.focus}</p>
       )}
 
-      {/* Pattern rows */}
       {result.patterns.length > 0 && (
         <div className="space-y-2.5 mb-4">
           {result.patterns.map((p, i) => (
             <div
               key={i}
-              className={`p-3.5 rounded-lg border ${
+              className={`p-3.5 rounded-xl border ${
                 p.severity === 'positive'
                   ? 'bg-emerald-500/5 border-emerald-500/10'
                   : 'bg-amber-500/5 border-amber-500/10'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className={`text-xs font-semibold ${
-                    p.severity === 'positive' ? 'text-emerald-400' : 'text-amber-400'
-                  }`}
-                >
-                  {p.severity === 'positive' ? '↑' : '⚠'} {p.label}
-                </span>
-              </div>
+              <p className={`text-xs font-semibold mb-1 ${p.severity === 'positive' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {p.severity === 'positive' ? '↑' : '⚠'} {p.label}
+              </p>
               <p className="text-sm text-zinc-400 leading-relaxed">{p.description}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* Focus for next trade */}
-      <div className="flex gap-3 items-start pt-3.5 border-t border-zinc-800">
-        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide w-24 flex-shrink-0 mt-0.5">
-          Focus next
-        </span>
+      <div className="flex gap-3 items-start pt-4 border-t border-zinc-800">
+        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide w-24 flex-shrink-0 mt-0.5">Focus next</span>
         <p className="text-sm text-zinc-300 leading-relaxed">{result.focus}</p>
       </div>
-    </Card>
+    </HoverCard>
+  );
+}
+
+// ─── Recent trades list ───────────────────────────────────────────────────────
+
+function RecentTrades({ trades }: { trades: Trade[] }) {
+  const recent = trades.slice(0, 6);
+  function fmt(n: number) {
+    return (n >= 0 ? '+' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return (
+    <FadeUp>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-200">Recent Trades</h2>
+            <p className="text-xs text-zinc-600 mt-0.5">Last {recent.length} of {trades.length}</p>
+          </div>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Link href="/trades" className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors font-medium">
+              View all →
+            </Link>
+          </motion.div>
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800/60">
+                {['Date', 'Symbol', 'Direction', 'Entry', 'Exit', 'P&L'].map((h) => (
+                  <th key={h} className="text-left text-xs font-medium text-zinc-600 px-5 py-3 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((t, i) => (
+                <motion.tr
+                  key={t.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.04 }}
+                  className="border-b border-zinc-800/40 last:border-0 hover:bg-zinc-800/30 transition-colors"
+                >
+                  <td className="px-5 py-3.5 text-zinc-500 text-xs">{t.date}</td>
+                  <td className="px-5 py-3.5 text-zinc-200 font-semibold">{t.symbol}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                      t.direction === 'long'
+                        ? 'bg-blue-500/10 text-blue-400'
+                        : 'bg-orange-500/10 text-orange-400'
+                    }`}>
+                      {t.direction === 'long' ? '↑ Long' : '↓ Short'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-zinc-500 text-xs font-mono">
+                    {t.entry_price != null ? `$${t.entry_price.toFixed(2)}` : '—'}
+                  </td>
+                  <td className="px-5 py-3.5 text-zinc-500 text-xs font-mono">
+                    {t.exit_price != null ? `$${t.exit_price.toFixed(2)}` : '—'}
+                  </td>
+                  <td className={`px-5 py-3.5 font-bold text-sm ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {fmt(t.pnl)}
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="sm:hidden divide-y divide-zinc-800/60">
+          {recent.map((t, i) => (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: i * 0.04 }}
+              className="px-5 py-4 flex items-center justify-between"
+            >
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-bold text-zinc-100">{t.symbol}</span>
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                    t.direction === 'long' ? 'bg-blue-500/10 text-blue-400' : 'bg-orange-500/10 text-orange-400'
+                  }`}>
+                    {t.direction === 'long' ? '↑' : '↓'}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-600">{t.date}</p>
+              </div>
+              <span className={`text-base font-bold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmt(t.pnl)}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </FadeUp>
+  );
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+const STEPS = [
+  { num: '1', title: 'Add your trades', desc: 'Log trades manually or upload a CSV from your broker.', href: '/trades', cta: 'Add trades →', altHref: '/trades/import', altCta: 'Import CSV' },
+  { num: '2', title: 'Set your rules', desc: 'Set your daily limits (max trades, max loss). AI checks if you break them.', href: '/rules', cta: 'Set rules →' },
+  { num: '3', title: 'Run AI Analysis', desc: 'AI scans all trades and tells you exactly which habits are costing you money.', href: '/analysis', cta: 'Run analysis →' },
+  { num: '4', title: 'Daily Report', desc: 'End each session with 3 mistakes and 3 things you did right.', href: '/report', cta: 'Open report →' },
+];
+
+function EmptyState() {
+  return (
+    <FadeUp>
+      <div className="space-y-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex gap-4 items-start">
+          <div className="w-9 h-9 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z" stroke="#fbbf24" strokeWidth="1.2" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-zinc-200">You&apos;re all set — here&apos;s how it works</p>
+            <p className="text-sm text-zinc-500 mt-0.5 leading-relaxed">
+              Futures Edge AI is a <strong className="text-zinc-400">trade journal with AI built in</strong>. Add trades, set your rules, and the AI detects patterns you&apos;d never spot yourself.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {STEPS.map((step, i) => (
+            <FadeUp key={step.num} delay={i * 0.07}>
+              <HoverCard className="flex flex-col justify-between h-full">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-6 h-6 bg-zinc-800 text-zinc-400 rounded-lg text-xs font-bold flex items-center justify-center flex-shrink-0">{step.num}</span>
+                    <span className="text-sm font-semibold text-zinc-200">{step.title}</span>
+                  </div>
+                  <p className="text-sm text-zinc-500 leading-relaxed mb-4">{step.desc}</p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Link href={step.href} className="bg-white text-zinc-950 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-zinc-100 transition-all">
+                      {step.cta}
+                    </Link>
+                  </motion.div>
+                  {step.altHref && step.altCta && (
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                      <Link href={step.altHref} className="bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-700 border border-zinc-700 transition-all">
+                        {step.altCta}
+                      </Link>
+                    </motion.div>
+                  )}
+                </div>
+              </HoverCard>
+            </FadeUp>
+          ))}
+        </div>
+      </div>
+    </FadeUp>
   );
 }
 
@@ -275,29 +466,20 @@ export default function DashboardPage() {
       const res = await fetch('/api/subscription');
       const data = await res.json();
       return data?.isPro === true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }
 
   useEffect(() => {
-    // Detect Stripe return params before fetching
     const params = new URLSearchParams(window.location.search);
     const checkoutStatus = params.get('checkout');
-
-    // Clean the URL immediately so params don't persist on refresh
     if (checkoutStatus) {
-      const clean = window.location.pathname;
-      window.history.replaceState({}, '', clean);
+      window.history.replaceState({}, '', window.location.pathname);
       setCheckoutBanner(checkoutStatus === 'success' ? 'success' : 'cancel');
     }
 
     async function load() {
       let pro = false;
-
       if (checkoutStatus === 'success') {
-        // On successful return: poll subscription up to 3× with 1s delay
-        // Stripe webhook may take a moment to write is_pro=true
         setSubRefreshing(true);
         for (let attempt = 0; attempt < 3; attempt++) {
           pro = await fetchSubscription();
@@ -312,7 +494,6 @@ export default function DashboardPage() {
       const tradesData = await fetch('/api/trades').then((r) => r.json());
       const tradeList = Array.isArray(tradesData) ? tradesData : [];
 
-      // Redirect new users to onboarding if they haven't completed it and have no trades
       const onboardingDone = (() => { try { return !!localStorage.getItem('onboarding_complete'); } catch { return true; } })();
       if (!onboardingDone && tradeList.length === 0 && checkoutStatus !== 'success') {
         router.replace('/onboarding');
@@ -332,261 +513,214 @@ export default function DashboardPage() {
   const curve = buildEquityCurve(trades);
 
   function fmt(n: number) {
-    return (
-      (n >= 0 ? '+' : '-') +
-      '$' +
-      Math.abs(n).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
-    );
+    return (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-zinc-600 text-sm">
-        <Spinner />
-        {subRefreshing ? 'Updating your account...' : 'Loading...'}
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-zinc-600 text-sm mb-2">
+          <Spinner />
+          {subRefreshing ? 'Updating your account...' : 'Loading your dashboard...'}
+        </div>
+        <LoadingSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Dashboard</h1>
-        <p className="text-zinc-500 mt-1 text-sm">
-          {trades.length === 0
-            ? 'Welcome — follow the steps below to get started'
-            : 'Your trading performance at a glance'}
-        </p>
-      </div>
+    <div className="space-y-6">
 
-      {/* Stripe return banners */}
-      {checkoutBanner === 'success' && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4 flex items-start gap-3">
-          <span className="text-emerald-400 flex-shrink-0 mt-0.5">
-            <svg width="16" height="16" viewBox="0 0 15 15" fill="none">
+      {/* ── Page header + Add Trade ── */}
+      <FadeUp>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Dashboard</h1>
+            <p className="text-zinc-500 text-sm mt-0.5">
+              {trades.length === 0 ? 'Welcome — get started below' : 'Your trading performance at a glance'}
+            </p>
+          </div>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Link
+              href="/trades"
+              className="flex items-center justify-center gap-2 bg-white text-zinc-950 font-semibold px-5 py-2.5 rounded-xl hover:bg-zinc-100 transition-all text-sm w-full sm:w-auto"
+            >
+              <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
+                <path d="M7.5 1v13M1 7.5h13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              Add Trade
+            </Link>
+          </motion.div>
+        </div>
+      </FadeUp>
+
+      {/* ── Checkout banners ── */}
+      <AnimatePresence>
+        {checkoutBanner === 'success' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-5 py-4 flex items-start gap-3"
+          >
+            <svg className="text-emerald-400 flex-shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 15 15" fill="none">
               <path d="M3 7.5L6 10.5L12 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-          </span>
-          <div>
-            <p className="text-emerald-400 text-sm font-semibold">Free trial started successfully</p>
-            <p className="text-emerald-400/70 text-sm mt-0.5">Your account is now active. AI Analysis and Trading Coach are unlocked.</p>
-          </div>
-        </div>
-      )}
-      {checkoutBanner === 'cancel' && (
-        <div className="bg-zinc-800 border border-zinc-700 rounded-xl px-5 py-4 flex items-start gap-3">
-          <span className="text-zinc-500 flex-shrink-0 mt-0.5">
-            <svg width="16" height="16" viewBox="0 0 15 15" fill="none">
+            <div>
+              <p className="text-emerald-400 text-sm font-semibold">Free trial started successfully</p>
+              <p className="text-emerald-400/70 text-sm mt-0.5">AI Analysis and Trading Coach are now unlocked.</p>
+            </div>
+          </motion.div>
+        )}
+        {checkoutBanner === 'cancel' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 flex items-start gap-3"
+          >
+            <svg className="text-zinc-500 flex-shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 15 15" fill="none">
               <path d="M7.5 1C4 1 1 4 1 7.5S4 14 7.5 14 14 11 14 7.5 11 1 7.5 1z" stroke="currentColor" strokeWidth="1.2"/>
               <path d="M7.5 5v4M7.5 10.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
             </svg>
-          </span>
-          <div>
-            <p className="text-zinc-300 text-sm font-semibold">Checkout canceled</p>
-            <p className="text-zinc-500 text-sm mt-0.5">No charges were made. You can start your free trial anytime from AI Analysis.</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── EMPTY STATE ── */}
-      {trades.length === 0 && (
-        <div className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex gap-4 items-start">
-            <div className="w-9 h-9 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg width="18" height="18" viewBox="0 0 15 15" fill="none">
-                <path
-                  d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z"
-                  stroke="#fbbf24"
-                  strokeWidth="1.2"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
             <div>
-              <p className="text-sm font-medium text-zinc-200">
-                You&apos;re all set — here&apos;s how it works
-              </p>
-              <p className="text-sm text-zinc-500 mt-0.5">
-                Futures Edge AI is a{' '}
-                <strong className="text-zinc-400">trade journal with AI built in</strong>. Add your
-                trades, set your rules, and the AI detects patterns you&apos;d never spot yourself.
-              </p>
+              <p className="text-zinc-300 text-sm font-semibold">Checkout canceled</p>
+              <p className="text-zinc-500 text-sm mt-0.5">No charges made. Start your free trial anytime from AI Analysis.</p>
             </div>
-          </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {STEPS.map((step) => (
-              <Card key={step.num} className="flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-6 h-6 bg-zinc-800 text-zinc-400 rounded-md text-xs font-bold flex items-center justify-center flex-shrink-0">
-                      {step.num}
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-200">{step.title}</span>
-                  </div>
-                  <p className="text-sm text-zinc-500 leading-relaxed mb-4">{step.desc}</p>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <Link
-                    href={step.href}
-                    className="bg-white text-zinc-950 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-zinc-100 transition-all"
-                  >
-                    {step.cta}
-                  </Link>
-                  {step.altHref && step.altCta && (
-                    <Link
-                      href={step.altHref}
-                      className="bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
-                    >
-                      {step.altCta}
-                    </Link>
-                  )}
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* ── Empty state ── */}
+      {trades.length === 0 && <EmptyState />}
 
-      {/* ── WITH TRADES ── */}
+      {/* ── With trades ── */}
       {trades.length > 0 && (
         <>
-          {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
-            <Card>
-              <p className="text-xs font-medium text-zinc-500 mb-1">Total P&L</p>
-              <p
-                className={`text-2xl font-bold tracking-tight ${
-                  stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                }`}
-              >
-                {fmt(stats.totalPnl)}
-              </p>
-              <p className="text-xs text-zinc-600 mt-1">{stats.totalTrades} trades</p>
-            </Card>
-            <Card>
-              <p className="text-xs font-medium text-zinc-500 mb-1">Win Rate</p>
-              <p className="text-2xl font-bold tracking-tight text-zinc-100">
-                {stats.winRate.toFixed(1)}%
-              </p>
-              <p className="text-xs text-zinc-600 mt-1">
-                {stats.winCount}W / {stats.lossCount}L
-              </p>
-            </Card>
-            <Card>
-              <p className="text-xs font-medium text-zinc-500 mb-1">Avg Win</p>
-              <p className="text-2xl font-bold tracking-tight text-emerald-400">
-                ${stats.avgWin.toFixed(2)}
-              </p>
-              <p className="text-xs text-zinc-600 mt-1">per winning trade</p>
-            </Card>
-            <Card>
-              <p className="text-xs font-medium text-zinc-500 mb-1">Avg Loss</p>
-              <p className="text-2xl font-bold tracking-tight text-red-400">
-                ${stats.avgLoss.toFixed(2)}
-              </p>
-              <p className="text-xs text-zinc-600 mt-1">per losing trade</p>
-            </Card>
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              label="Total P&L"
+              value={fmt(stats.totalPnl)}
+              sub={`${stats.totalTrades} trades`}
+              valueClass={stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              delay={0}
+            />
+            <StatCard
+              label="Win Rate"
+              value={`${stats.winRate.toFixed(1)}%`}
+              sub={`${stats.winCount}W / ${stats.lossCount}L`}
+              delay={0.05}
+            />
+            <StatCard
+              label="Avg Win"
+              value={`$${stats.avgWin.toFixed(2)}`}
+              sub="per winning trade"
+              valueClass="text-emerald-400"
+              delay={0.1}
+            />
+            <StatCard
+              label="Avg Loss"
+              value={`$${stats.avgLoss.toFixed(2)}`}
+              sub="per losing trade"
+              valueClass="text-red-400"
+              delay={0.15}
+            />
           </div>
 
-          {/* Coach + Patterns side by side on wider screens */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <CoachCard isPro={isPro} />
-            <PatternsCard trades={trades} />
+          {/* Coach + Patterns */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <FadeUp delay={0.05}>
+              <CoachCard isPro={isPro} />
+            </FadeUp>
+            <FadeUp delay={0.1}>
+              <PatternsCard trades={trades} />
+            </FadeUp>
           </div>
 
           {/* Equity curve */}
-          <Card>
-            <div className="flex flex-wrap justify-between items-start gap-3 mb-6">
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-200">Equity Curve</h2>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  Your running total P&L over time — a flat or upward line is the goal
-                </p>
+          <FadeUp>
+            <HoverCard>
+              <div className="flex flex-wrap justify-between items-start gap-3 mb-6">
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-200">Equity Curve</h2>
+                  <p className="text-xs text-zinc-500 mt-0.5">Running total P&L — flat or upward is the goal</p>
+                </div>
+                <span className={`text-sm font-bold ${stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {fmt(stats.totalPnl)}
+                </span>
               </div>
-              <span
-                className={`text-sm font-semibold ${
-                  stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                }`}
-              >
-                {fmt(stats.totalPnl)}
-              </span>
-            </div>
-            <EquityCurve data={curve} />
-          </Card>
+              <EquityCurve data={curve} />
+            </HoverCard>
+          </FadeUp>
 
           {/* Best / Worst day */}
-          <div className="grid grid-cols-2 gap-4">
-            {stats.bestDay && (
-              <Card>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 bg-emerald-500/10 rounded-md flex items-center justify-center">
-                    <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
-                      <path
-                        d="M7.5 2L7.5 13M3 6.5L7.5 2L12 6.5"
-                        stroke="#34d399"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                  <span className="text-xs font-medium text-zinc-500">Best Day</span>
-                </div>
-                <p className="text-xl font-bold text-emerald-400">{fmt(stats.bestDay.pnl)}</p>
-                <p className="text-xs text-zinc-600 mt-1">{stats.bestDay.date}</p>
-              </Card>
-            )}
-            {stats.worstDay && (
-              <Card>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 bg-red-500/10 rounded-md flex items-center justify-center">
-                    <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
-                      <path
-                        d="M7.5 13L7.5 2M3 8.5L7.5 13L12 8.5"
-                        stroke="#f87171"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                  <span className="text-xs font-medium text-zinc-500">Worst Day</span>
-                </div>
-                <p className="text-xl font-bold text-red-400">{fmt(stats.worstDay.pnl)}</p>
-                <p className="text-xs text-zinc-600 mt-1">{stats.worstDay.date}</p>
-              </Card>
-            )}
-          </div>
+          {(stats.bestDay || stats.worstDay) && (
+            <div className="grid grid-cols-2 gap-3">
+              {stats.bestDay && (
+                <FadeUp>
+                  <HoverCard>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                        <svg width="11" height="11" viewBox="0 0 15 15" fill="none">
+                          <path d="M7.5 2v11M3 6.5L7.5 2l4.5 4.5" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <span className="text-xs font-medium text-zinc-500">Best Day</span>
+                    </div>
+                    <p className="text-xl font-bold text-emerald-400">{fmt(stats.bestDay.pnl)}</p>
+                    <p className="text-xs text-zinc-600 mt-1">{stats.bestDay.date}</p>
+                  </HoverCard>
+                </FadeUp>
+              )}
+              {stats.worstDay && (
+                <FadeUp delay={0.05}>
+                  <HoverCard>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-red-500/10 rounded-lg flex items-center justify-center">
+                        <svg width="11" height="11" viewBox="0 0 15 15" fill="none">
+                          <path d="M7.5 13V2M3 8.5L7.5 13l4.5-4.5" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <span className="text-xs font-medium text-zinc-500">Worst Day</span>
+                    </div>
+                    <p className="text-xl font-bold text-red-400">{fmt(stats.worstDay.pnl)}</p>
+                    <p className="text-xs text-zinc-600 mt-1">{stats.worstDay.date}</p>
+                  </HoverCard>
+                </FadeUp>
+              )}
+            </div>
+          )}
+
+          {/* Recent trades */}
+          <RecentTrades trades={trades} />
 
           {/* Quick actions */}
-          <Card className="bg-zinc-900/50">
-            <p className="text-xs font-medium text-zinc-500 mb-3">More tools</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link
-                href="/analysis"
-                className="text-center bg-white text-zinc-950 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-zinc-100 transition-all"
-              >
-                Full AI Analysis
-              </Link>
-              <Link
-                href="/report"
-                className="text-center bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
-              >
-                Today&apos;s Report
-              </Link>
-              <Link
-                href="/trades/import"
-                className="text-center bg-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 border border-zinc-700 transition-all"
-              >
-                Import CSV
-              </Link>
+          <FadeUp>
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5">
+              <p className="text-xs font-medium text-zinc-600 uppercase tracking-wide mb-4">More tools</p>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                {[
+                  { href: '/analysis', label: 'Full AI Analysis', primary: true },
+                  { href: '/report', label: "Today's Report", primary: false },
+                  { href: '/trades/import', label: 'Import CSV', primary: false },
+                ].map(({ href, label, primary }) => (
+                  <motion.div key={href} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 sm:flex-none">
+                    <Link
+                      href={href}
+                      className={`flex items-center justify-center text-center py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
+                        primary
+                          ? 'bg-white text-zinc-950 hover:bg-zinc-100 font-semibold'
+                          : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700'
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
             </div>
-          </Card>
+          </FadeUp>
         </>
       )}
     </div>
