@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, useInView, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { Trade } from '@/types';
 import { computeStats, buildEquityCurve } from '@/lib/trade-stats';
-import { detectPatterns, PatternResult } from '@/lib/patterns';
+import { detectPatterns } from '@/lib/patterns';
 import EquityCurve from '@/components/charts/EquityCurve';
 import Link from 'next/link';
 import LockedFeature from '@/components/LockedFeature';
@@ -30,9 +30,9 @@ function FadeUp({
     <motion.div
       ref={ref}
       className={className}
-      initial={{ opacity: 0, y: reduce ? 0 : 16 }}
+      initial={{ opacity: 0, y: reduce ? 0 : 14 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay, ease: EASE }}
+      transition={{ duration: 0.45, delay, ease: EASE }}
     >
       {children}
     </motion.div>
@@ -55,14 +55,20 @@ function HoverCard({ children, className = '' }: { children: React.ReactNode; cl
 // ─── Shimmer skeleton ─────────────────────────────────────────────────────────
 
 function Shimmer({ className = '' }: { className?: string }) {
-  return (
-    <div className={`rounded-lg bg-zinc-800 animate-pulse ${className}`} />
-  );
+  return <div className={`rounded-lg bg-zinc-800 animate-pulse ${className}`} />;
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Brief skeleton */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+        <Shimmer className="h-3 w-36" />
+        <Shimmer className="h-4 w-full" />
+        <Shimmer className="h-4 w-4/5" />
+        <Shimmer className="h-14 w-full rounded-xl" />
+      </div>
+      {/* Stats skeleton */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-2">
@@ -72,10 +78,12 @@ function LoadingSkeleton() {
           </div>
         ))}
       </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-3">
+      {/* Coach skeleton */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
         <Shimmer className="h-4 w-32" />
-        <Shimmer className="h-20 w-full" />
-        <Shimmer className="h-20 w-full" />
+        <Shimmer className="h-16 w-full rounded-xl" />
+        <Shimmer className="h-16 w-full rounded-xl" />
+        <Shimmer className="h-12 w-full rounded-xl" />
       </div>
     </div>
   );
@@ -118,14 +126,181 @@ function StatCard({
   );
 }
 
+// ─── Progress metrics ─────────────────────────────────────────────────────────
+
+function computeProgressMetrics(trades: Trade[]) {
+  if (trades.length < 5) return null;
+
+  const sorted = [...trades].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  const wins = trades.filter((t) => t.pnl > 0);
+  const losses = trades.filter((t) => t.pnl < 0);
+  const allWinRate = (wins.length / trades.length) * 100;
+
+  const recent10 = sorted.slice(-Math.min(10, sorted.length));
+  const recent10WinRate =
+    (recent10.filter((t) => t.pnl > 0).length / recent10.length) * 100;
+  const winRateChange = recent10WinRate - allWinRate;
+
+  const avgWin =
+    wins.length > 0 ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0;
+  const avgLoss =
+    losses.length > 0
+      ? Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length)
+      : 0;
+
+  // Consistency score (0–95): R:R (40pts) + improvement (30pts) + win rate (25pts)
+  const rrScore =
+    avgLoss > 0 ? Math.min(40, Math.round((avgWin / avgLoss) * 20)) : 20;
+  const improvScore =
+    winRateChange > 5 ? 30 : winRateChange > 0 ? 22 : winRateChange > -10 ? 14 : 8;
+  const wrScore = Math.round(Math.min(25, (allWinRate / 100) * 32));
+  const consistencyScore = Math.max(15, Math.min(95, rrScore + improvScore + wrScore));
+
+  // Mistake frequency: % of trades that follow a loss and are also losses
+  let mistakeTrades = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i - 1].pnl < 0 && sorted[i].pnl < 0) mistakeTrades++;
+  }
+  const mistakeFrequency =
+    trades.length > 1
+      ? Math.round((mistakeTrades / (trades.length - 1)) * 100)
+      : 0;
+
+  return { winRateChange, consistencyScore, mistakeFrequency };
+}
+
+function ProgressMetrics({ trades }: { trades: Trade[] }) {
+  const m = computeProgressMetrics(trades);
+  if (!m) return null;
+
+  const wrChangeColor =
+    m.winRateChange >= 3
+      ? 'text-emerald-400'
+      : m.winRateChange >= -5
+      ? 'text-zinc-300'
+      : 'text-red-400';
+
+  const mistakeColor =
+    m.mistakeFrequency > 35
+      ? 'text-red-400'
+      : m.mistakeFrequency > 18
+      ? 'text-amber-400'
+      : 'text-emerald-400';
+
+  const items = [
+    {
+      label: 'Win Rate Trend',
+      value:
+        m.winRateChange >= 0
+          ? `+${m.winRateChange.toFixed(0)}%`
+          : `${m.winRateChange.toFixed(0)}%`,
+      sub: 'last 10 vs all-time',
+      valueClass: wrChangeColor,
+    },
+    {
+      label: 'Consistency',
+      value: `${m.consistencyScore}`,
+      sub: 'score / 100',
+      valueClass: 'text-zinc-100',
+    },
+    {
+      label: 'Mistake Rate',
+      value: `${m.mistakeFrequency}%`,
+      sub: 'repeat-loss trades',
+      valueClass: mistakeColor,
+    },
+  ];
+
+  return (
+    <FadeUp>
+      <div className="grid grid-cols-3 gap-3">
+        {items.map(({ label, value, sub, valueClass }, i) => (
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06, duration: 0.4, ease: EASE }}
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-center"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-2 leading-tight">
+              {label}
+            </p>
+            <p className={`text-xl font-bold tracking-tight ${valueClass}`}>{value}</p>
+            <p className="text-[10px] text-zinc-700 mt-1 leading-tight">{sub}</p>
+          </motion.div>
+        ))}
+      </div>
+    </FadeUp>
+  );
+}
+
+// ─── Today's Trading Brief ────────────────────────────────────────────────────
+
+function TradingBrief({ trades }: { trades: Trade[] }) {
+  if (trades.length < 3) return null;
+
+  const result = detectPatterns(trades);
+  const topPattern = result.patterns[0] ?? null;
+
+  return (
+    <FadeUp>
+      <div className="rounded-2xl border border-zinc-800/70 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 p-5 md:p-6">
+        {/* Header */}
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+          </span>
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+            Today&apos;s Trading Focus
+          </p>
+        </div>
+
+        {/* Focus rule */}
+        <p className="text-zinc-100 text-[15px] font-medium leading-relaxed mb-4">
+          {result.focus}
+        </p>
+
+        {/* Detected pattern */}
+        {topPattern && (
+          <div
+            className={`flex gap-3 items-start p-3.5 rounded-xl border ${
+              topPattern.severity === 'positive'
+                ? 'bg-emerald-500/5 border-emerald-500/15'
+                : 'bg-amber-500/5 border-amber-500/15'
+            }`}
+          >
+            <span
+              className={`text-[10px] font-bold uppercase tracking-widest flex-shrink-0 mt-0.5 w-16 ${
+                topPattern.severity === 'positive'
+                  ? 'text-emerald-400'
+                  : 'text-amber-400'
+              }`}
+            >
+              {topPattern.severity === 'positive' ? 'Edge' : 'Warning'}
+            </span>
+            <p className="text-sm text-zinc-300 leading-relaxed">
+              {topPattern.description}
+            </p>
+          </div>
+        )}
+      </div>
+    </FadeUp>
+  );
+}
+
 // ─── Coach Card ───────────────────────────────────────────────────────────────
 
 interface CoachInsight {
   empty: boolean;
   message?: string;
   strength?: string;
-  weakness?: string;
-  suggestion?: string;
+  mistake?: string;
+  fix?: string;
+  nextTrade?: string;
 }
 
 function CoachCard({ isPro }: { isPro: boolean }) {
@@ -166,9 +341,17 @@ function CoachCard({ isPro }: { isPro: boolean }) {
     );
   }
 
+  const rows: { label: string; text: string | undefined; color: string; accent: string }[] = [
+    { label: 'Your Edge', text: insight?.strength, color: 'bg-emerald-500/5 border-emerald-500/15', accent: 'text-emerald-400' },
+    { label: 'Your Biggest Mistake', text: insight?.mistake, color: 'bg-red-500/5 border-red-500/15', accent: 'text-red-400' },
+    { label: 'Fix This Immediately', text: insight?.fix, color: 'bg-orange-500/5 border-orange-500/15', accent: 'text-orange-400' },
+    { label: 'On Your Next Trade', text: insight?.nextTrade, color: 'bg-violet-500/5 border-violet-500/15', accent: 'text-violet-400' },
+  ].filter((r) => r.text !== undefined);
+
   return (
-    <HoverCard>
-      <div className="flex items-start justify-between mb-5">
+    <HoverCard className="!p-0 overflow-hidden">
+      {/* Card header */}
+      <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-zinc-800/60">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 bg-violet-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
             <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
@@ -178,12 +361,12 @@ function CoachCard({ isPro }: { isPro: boolean }) {
             </svg>
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-zinc-200">Trading Coach</h2>
-            <p className="text-xs text-zinc-600">One-click personalised feedback</p>
+            <h2 className="text-sm font-semibold text-zinc-100">Elite Coaching</h2>
+            <p className="text-xs text-zinc-600 mt-0.5">Direct feedback from your numbers</p>
           </div>
         </div>
         {loading ? (
-          <div className="flex items-center gap-2 text-zinc-500 text-xs">
+          <div className="flex items-center gap-2 text-zinc-500 text-xs pt-0.5">
             <Spinner className="w-3.5 h-3.5" /> Analyzing...
           </div>
         ) : (
@@ -198,95 +381,47 @@ function CoachCard({ isPro }: { isPro: boolean }) {
         )}
       </div>
 
-      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-
-      {!insight && !loading && !error && (
-        <p className="text-sm text-zinc-600">
-          Click <span className="text-zinc-400 font-medium">Get Insight</span> for one strength, one weakness, and one focus for your next trade.
-        </p>
-      )}
-
-      {insight?.empty && <p className="text-sm text-zinc-500">{insight.message}</p>}
-
-      <AnimatePresence>
-        {insight && !insight.empty && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: EASE }}
-            className="space-y-3"
-          >
-            {[
-              { label: 'Strength', text: insight.strength, color: 'emerald' },
-              { label: 'Weakness', text: insight.weakness, color: 'red' },
-              { label: 'Next trade', text: insight.suggestion, color: 'violet' },
-            ].map(({ label, text, color }) => {
-              const styles: Record<string, string> = {
-                emerald: 'bg-emerald-500/5 border-emerald-500/15 text-emerald-400',
-                red: 'bg-red-500/5 border-red-500/15 text-red-400',
-                violet: 'bg-violet-500/5 border-violet-500/15 text-violet-400',
-              };
-              return (
-                <div key={label} className={`flex gap-3 items-start p-4 rounded-xl border ${styles[color].split(' ').slice(0,2).join(' ')}`}>
-                  <span className={`text-xs font-semibold uppercase tracking-wide w-20 flex-shrink-0 mt-0.5 ${styles[color].split(' ')[2]}`}>{label}</span>
-                  <p className="text-sm text-zinc-300 leading-relaxed">{text}</p>
-                </div>
-              );
-            })}
-          </motion.div>
+      {/* Card body */}
+      <div className="px-5 py-4">
+        {error && (
+          <p className="text-red-400 text-sm mb-3">{error}</p>
         )}
-      </AnimatePresence>
-    </HoverCard>
-  );
-}
 
-// ─── Patterns Card ────────────────────────────────────────────────────────────
+        {!insight && !loading && !error && (
+          <p className="text-sm text-zinc-600 py-2">
+            Tap <span className="text-zinc-400 font-medium">Get Insight</span> — your coach will name your biggest mistake and tell you exactly what to fix on your next trade.
+          </p>
+        )}
 
-function PatternsCard({ trades }: { trades: Trade[] }) {
-  const result: PatternResult = detectPatterns(trades);
-  return (
-    <HoverCard>
-      <div className="flex items-center gap-2.5 mb-5">
-        <div className="w-7 h-7 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
-          <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
-            <path d="M2 12L5.5 7.5L8.5 10L11 6.5L13 8.5" stroke="#fbbf24" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="2" cy="12" r="1" fill="#fbbf24"/>
-            <circle cx="13" cy="8.5" r="1" fill="#fbbf24"/>
-          </svg>
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-200">Patterns</h2>
-          <p className="text-xs text-zinc-600">Detected from your history</p>
-        </div>
-      </div>
+        {insight?.empty && (
+          <p className="text-sm text-zinc-500 py-2">{insight.message}</p>
+        )}
 
-      {result.patterns.length === 0 && (
-        <p className="text-sm text-zinc-600 mb-4">{result.focus}</p>
-      )}
-
-      {result.patterns.length > 0 && (
-        <div className="space-y-2.5 mb-4">
-          {result.patterns.map((p, i) => (
-            <div
-              key={i}
-              className={`p-3.5 rounded-xl border ${
-                p.severity === 'positive'
-                  ? 'bg-emerald-500/5 border-emerald-500/10'
-                  : 'bg-amber-500/5 border-amber-500/10'
-              }`}
+        <AnimatePresence>
+          {insight && !insight.empty && rows.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: EASE }}
+              className="space-y-2.5"
             >
-              <p className={`text-xs font-semibold mb-1 ${p.severity === 'positive' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {p.severity === 'positive' ? '↑' : '⚠'} {p.label}
-              </p>
-              <p className="text-sm text-zinc-400 leading-relaxed">{p.description}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex gap-3 items-start pt-4 border-t border-zinc-800">
-        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide w-24 flex-shrink-0 mt-0.5">Focus next</span>
-        <p className="text-sm text-zinc-300 leading-relaxed">{result.focus}</p>
+              {rows.map(({ label, text, color, accent }, i) => (
+                <motion.div
+                  key={label}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.07, duration: 0.3, ease: EASE }}
+                  className={`p-4 rounded-xl border ${color}`}
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ${accent}`}>
+                    {label}
+                  </p>
+                  <p className="text-sm text-zinc-200 leading-relaxed font-medium">{text}</p>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </HoverCard>
   );
@@ -337,9 +472,7 @@ function RecentTrades({ trades }: { trades: Trade[] }) {
                   <td className="px-5 py-3.5 text-zinc-200 font-semibold">{t.symbol}</td>
                   <td className="px-5 py-3.5">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
-                      t.direction === 'long'
-                        ? 'bg-blue-500/10 text-blue-400'
-                        : 'bg-orange-500/10 text-orange-400'
+                      t.direction === 'long' ? 'bg-blue-500/10 text-blue-400' : 'bg-orange-500/10 text-orange-400'
                     }`}>
                       {t.direction === 'long' ? '↑ Long' : '↓ Short'}
                     </span>
@@ -396,7 +529,7 @@ function RecentTrades({ trades }: { trades: Trade[] }) {
 const STEPS = [
   { num: '1', title: 'Add your trades', desc: 'Log trades manually or upload a CSV from your broker.', href: '/trades', cta: 'Add trades →', altHref: '/trades/import', altCta: 'Import CSV' },
   { num: '2', title: 'Set your rules', desc: 'Set your daily limits (max trades, max loss). AI checks if you break them.', href: '/rules', cta: 'Set rules →' },
-  { num: '3', title: 'Run AI Analysis', desc: 'AI scans all trades and tells you exactly which habits are costing you money.', href: '/analysis', cta: 'Run analysis →' },
+  { num: '3', title: 'Run AI Coach', desc: 'AI scans all trades and tells you exactly which habits are costing you money.', href: '/analysis', cta: 'Run analysis →' },
   { num: '4', title: 'Daily Report', desc: 'End each session with 3 mistakes and 3 things you did right.', href: '/report', cta: 'Open report →' },
 ];
 
@@ -529,18 +662,27 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
       {/* ── Page header ── */}
       <FadeUp>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Dashboard</h1>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Pro Dashboard</h1>
+              {isPro && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-violet-500/15 text-violet-400 border border-violet-500/25">
+                  PRO
+                </span>
+              )}
+            </div>
             <p className="text-zinc-500 text-sm mt-0.5">
-              {trades.length === 0 ? 'Welcome — get started below' : 'Your trading performance at a glance'}
+              {trades.length === 0
+                ? 'Welcome — get started below'
+                : 'Your edge. Your mistakes. Your next move.'}
             </p>
           </div>
-          {/* Desktop Add Trade button — bottom nav FAB handles mobile */}
+          {/* Desktop Add Trade — bottom nav FAB handles mobile */}
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="hidden sm:block">
             <Link
               href="/trades"
@@ -555,7 +697,7 @@ export default function DashboardPage() {
         </div>
       </FadeUp>
 
-      {/* ── Mobile Add Trade CTA (full-width, thumb-friendly) ── */}
+      {/* ── Mobile Add Trade CTA ── */}
       {trades.length > 0 && (
         <motion.div className="sm:hidden" whileTap={{ scale: 0.97 }}>
           <Link
@@ -601,7 +743,7 @@ export default function DashboardPage() {
             </svg>
             <div>
               <p className="text-zinc-300 text-sm font-semibold">Checkout canceled</p>
-              <p className="text-zinc-500 text-sm mt-0.5">No charges made. Start your free trial anytime from AI Analysis.</p>
+              <p className="text-zinc-500 text-sm mt-0.5">No charges made. Start your free trial anytime from AI Coach.</p>
             </div>
           </motion.div>
         )}
@@ -612,50 +754,49 @@ export default function DashboardPage() {
 
       {/* ── With trades ── */}
       {trades.length > 0 && (
-        <>
-          {/* flex-col container so CSS order works for mobile reordering */}
-          <div className="flex flex-col gap-4 md:gap-6">
+        <div className="space-y-5">
 
-            {/* Coach + Patterns — order-1 on mobile (FIRST), md:order-2 on desktop (after stats) */}
-            <div className="order-1 md:order-2 grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <FadeUp delay={0.05}>
-                <CoachCard isPro={isPro} />
-              </FadeUp>
-              <FadeUp delay={0.1}>
-                <PatternsCard trades={trades} />
-              </FadeUp>
-            </div>
+          {/* Today's Trading Brief — always first */}
+          <TradingBrief trades={trades} />
 
-            {/* Stats — order-2 on mobile (below coach), md:order-1 on desktop (first) */}
-            <div className="order-2 md:order-1 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard
-                label="Total P&L"
-                value={fmt(stats.totalPnl)}
-                sub={`${stats.totalTrades} trades`}
-                valueClass={stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
-                delay={0}
-              />
-              <StatCard
-                label="Win Rate"
-                value={`${stats.winRate.toFixed(1)}%`}
-                sub={`${stats.winCount}W / ${stats.lossCount}L`}
-                delay={0.05}
-              />
-              <StatCard
-                label="Avg Win"
-                value={`$${stats.avgWin.toFixed(2)}`}
-                sub="per winning trade"
-                valueClass="text-emerald-400"
-                delay={0.1}
-              />
-              <StatCard
-                label="Avg Loss"
-                value={`$${stats.avgLoss.toFixed(2)}`}
-                sub="per losing trade"
-                valueClass="text-red-400"
-                delay={0.15}
-              />
-            </div>
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              label="Total P&L"
+              value={fmt(stats.totalPnl)}
+              sub={`${stats.totalTrades} trades`}
+              valueClass={stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              delay={0}
+            />
+            <StatCard
+              label="Win Rate"
+              value={`${stats.winRate.toFixed(1)}%`}
+              sub={`${stats.winCount}W / ${stats.lossCount}L`}
+              delay={0.05}
+            />
+            <StatCard
+              label="Avg Win"
+              value={`$${stats.avgWin.toFixed(2)}`}
+              sub="per winning trade"
+              valueClass="text-emerald-400"
+              delay={0.1}
+            />
+            <StatCard
+              label="Avg Loss"
+              value={`$${stats.avgLoss.toFixed(2)}`}
+              sub="per losing trade"
+              valueClass="text-red-400"
+              delay={0.15}
+            />
+          </div>
+
+          {/* Elite Coaching */}
+          <FadeUp delay={0.05}>
+            <CoachCard isPro={isPro} />
+          </FadeUp>
+
+          {/* Progress Metrics */}
+          <ProgressMetrics trades={trades} />
 
           {/* Equity curve */}
           <FadeUp>
@@ -714,35 +855,7 @@ export default function DashboardPage() {
           {/* Recent trades */}
           <RecentTrades trades={trades} />
 
-          {/* Quick actions */}
-          <FadeUp>
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5">
-              <p className="text-xs font-medium text-zinc-600 uppercase tracking-wide mb-4">More tools</p>
-              <div className="flex flex-col sm:flex-row gap-2.5">
-                {[
-                  { href: '/analysis', label: 'Full AI Analysis', primary: true },
-                  { href: '/report', label: "Today's Report", primary: false },
-                  { href: '/trades/import', label: 'Import CSV', primary: false },
-                ].map(({ href, label, primary }) => (
-                  <motion.div key={href} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 sm:flex-none">
-                    <Link
-                      href={href}
-                      className={`flex items-center justify-center text-center py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-                        primary
-                          ? 'bg-white text-zinc-950 hover:bg-zinc-100 font-semibold'
-                          : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700'
-                      }`}
-                    >
-                      {label}
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </FadeUp>
-
-          </div>{/* end flex-col */}
-        </>
+        </div>
       )}
     </div>
   );

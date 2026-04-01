@@ -129,24 +129,27 @@ export async function GET() {
     notesLines.length > 0 ? `Trader notes from recent trades:\n${notesLines.join('\n')}` : null,
   ].filter(Boolean).join('\n');
 
-  const prompt = `You are a direct, experienced trading coach giving feedback to one of your traders. You have their real numbers in front of you. Your job is to give them three things: one genuine strength, one honest weakness, and one specific action for their very next trade.
+  const prompt = `You are an elite trading coach — the kind traders pay $500/hour to work with. You have real numbers in front of you. Give it to them straight. No softening. No encouragement for the sake of it.
 
 TRADER'S STATS:
 ${statsBlock}
 
-RULES FOR YOUR RESPONSE:
-1. Speak directly to the trader. Use "you" and "your". Never say "the trader" or "based on your data" or "it appears".
-2. Every sentence must reference a specific number from the stats above. No generic statements.
-3. Be honest. If their losses dwarf their wins, say it plainly. If they overtrade, call it out.
-4. Keep each field to 1-2 sentences maximum. No filler. No hedging.
-5. For "suggestion" — start with an action verb. Make it something they can do on literally the next trade. Not advice for "going forward" in general.
-6. Never promise profits. Never use the phrase "ensure that" or "it's important to".
+ABSOLUTE RULES:
+1. Use "you" and "your". Never "the trader", "one might", "it appears", or "based on your data".
+2. Every sentence must cite a specific number from the stats. No number = rewrite the sentence.
+3. Be honest and direct. A $50/month coaching tool must be worth more than a pat on the back.
+4. Maximum 1-2 sentences per field. Every word must earn its place.
+5. "mistake" MUST start with: "Your biggest mistake is" — then name it plainly with the number.
+6. "fix" MUST start with: "Fix this immediately:" — then one specific behavioral change.
+7. "nextTrade" MUST start with: "On your next trade:" — one concrete, pre-trade action.
+8. Never promise profits. Never say "ensure that" or "it's important to".
 
-Return ONLY valid JSON — no markdown, no explanation:
+Return ONLY valid JSON — no markdown, no text outside the braces:
 {
-  "strength": "One genuine strength using a specific number from their stats.",
-  "weakness": "One clear weakness using a specific number that shows the problem.",
-  "suggestion": "One action verb + one sentence they can act on in their next trade."
+  "strength": "Your [specific strength] is [specific number/fact]. 1 sentence, cite the number.",
+  "mistake": "Your biggest mistake is [name the exact problem] — [the number that proves it]. 1-2 sentences.",
+  "fix": "Fix this immediately: [one specific behavioral change tied to the mistake]. 1 sentence.",
+  "nextTrade": "On your next trade: [one concrete pre-trade rule or limit they must follow]. 1 sentence."
 }`;
 
   try {
@@ -163,7 +166,15 @@ Return ONLY valid JSON — no markdown, no explanation:
     const result = JSON.parse(cleaned);
 
     console.log('[GET /api/coach] Coaching insight generated for user', user.id);
-    return NextResponse.json({ ...result, empty: false });
+    // Normalise: support both old (weakness/suggestion) and new (mistake/fix/nextTrade) field names
+    const normalised = {
+      strength: result.strength,
+      mistake: result.mistake ?? result.weakness,
+      fix: result.fix,
+      nextTrade: result.nextTrade ?? result.suggestion,
+      empty: false,
+    };
+    return NextResponse.json(normalised);
   } catch (err: any) {
     console.error('[GET /api/coach] AI call failed:', err);
     const message = err?.message?.includes('JSON')
