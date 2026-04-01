@@ -360,12 +360,29 @@ export default function OnboardingPage() {
               <path d="M5 6V4.5a2.5 2.5 0 015 0V6" stroke="#a78bfa" strokeWidth="1.3" strokeLinecap="round"/>
             </svg>
           </div>
-          <p className="text-sm font-semibold text-zinc-100 mb-1">Unlock deeper coaching</p>
-          <p className="text-xs text-zinc-500 mb-5 leading-relaxed">
-            Get full AI Analysis, daily reports, and ongoing coaching — personalized to every trade you log.
+          <p className="text-sm font-semibold text-zinc-100 mb-1.5">Stop repeating the same trading mistakes.</p>
+          <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
+            Futures Edge AI analyzes every trade and tells you exactly what to fix next.
           </p>
+          <ul className="space-y-2 mb-5 text-left">
+            {[
+              'Know your biggest mistake instantly',
+              'Get one clear focus for your next trade',
+              'Build consistency faster',
+            ].map((item) => (
+              <li key={item} className="flex gap-2 items-center">
+                <span className="w-3.5 h-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded flex items-center justify-center flex-shrink-0">
+                  <svg width="7" height="7" viewBox="0 0 15 15" fill="none">
+                    <path d="M3 7.5L6 10.5L12 4.5" stroke="#34d399" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </span>
+                <span className="text-xs text-zinc-300">{item}</span>
+              </li>
+            ))}
+          </ul>
           <StartTrialButton />
-          <p className="text-xs text-zinc-600 mt-3">3 days free — $19/month after. Cancel anytime.</p>
+          <p className="text-xs text-zinc-600 mt-2.5">3-day free trial &bull; Cancel anytime</p>
+          <p className="text-xs text-zinc-700 mt-4 pt-4 border-t border-zinc-800">Built for serious traders improving their edge daily.</p>
         </div>
       ) : (
         <button

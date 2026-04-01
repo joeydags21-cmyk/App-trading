@@ -25,36 +25,28 @@ export default function Paywall() {
       <div className="max-w-sm w-full mx-auto">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
 
-          {/* Lock icon */}
-          <div className="w-10 h-10 bg-violet-500/10 border border-violet-500/20 rounded-xl flex items-center justify-center mb-5">
-            <svg width="16" height="16" viewBox="0 0 15 15" fill="none">
-              <rect x="2" y="6" width="11" height="8" rx="1.5" stroke="#a78bfa" strokeWidth="1.3" />
-              <path d="M5 6V4.5a2.5 2.5 0 015 0V6" stroke="#a78bfa" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-          </div>
-
           {/* Headline */}
-          <h2 className="text-xl font-bold text-zinc-100 tracking-tight mb-1">
-            Unlock Your Trading Edge
+          <h2 className="text-xl font-bold text-zinc-100 tracking-tight mb-2">
+            Stop repeating the same trading mistakes.
           </h2>
-          <p className="text-zinc-500 text-sm mb-6">
-            Get AI-powered insights and coaching
+          <p className="text-zinc-400 text-sm leading-relaxed mb-6">
+            Futures Edge AI analyzes your trades and tells you exactly what to fix on your next trade.
           </p>
 
-          {/* Features */}
-          <ul className="space-y-2.5 mb-7">
+          {/* Value bullets */}
+          <ul className="space-y-3 mb-7">
             {[
-              'AI finds your mistakes — automatically',
-              'Tells you exactly what to fix next trade',
-              'Personalized coaching based on your data',
+              'Know your biggest mistake instantly',
+              'Get one clear focus for your next trade',
+              'Build consistency faster',
             ].map((item) => (
-              <li key={item} className="flex gap-2.5 items-center">
+              <li key={item} className="flex gap-3 items-center">
                 <span className="w-4 h-4 bg-emerald-500/10 border border-emerald-500/20 rounded flex items-center justify-center flex-shrink-0">
                   <svg width="8" height="8" viewBox="0 0 15 15" fill="none">
                     <path d="M3 7.5L6 10.5L12 4.5" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
-                <span className="text-sm text-zinc-300">{item}</span>
+                <span className="text-sm text-zinc-200">{item}</span>
               </li>
             ))}
           </ul>
@@ -70,7 +62,7 @@ export default function Paywall() {
           <button
             onClick={startTrial}
             disabled={loading}
-            className="w-full bg-white text-zinc-950 font-semibold py-2.5 px-6 rounded-xl hover:bg-zinc-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+            className="w-full bg-white text-zinc-950 font-semibold py-3 px-6 rounded-xl hover:bg-zinc-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
           >
             {loading ? (
               <>
@@ -83,8 +75,13 @@ export default function Paywall() {
             ) : 'Start Free Trial'}
           </button>
 
-          <p className="text-xs text-zinc-600 mt-3 text-center">
-            3 days free — $19/month after. Cancel anytime.
+          <p className="text-xs text-zinc-600 mt-2.5 text-center">
+            3-day free trial &bull; Cancel anytime
+          </p>
+
+          {/* Trust line */}
+          <p className="text-xs text-zinc-700 mt-5 text-center border-t border-zinc-800 pt-5">
+            Built for serious traders improving their edge daily.
           </p>
         </div>
       </div>
