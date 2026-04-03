@@ -5,8 +5,6 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { isSubscribed } from '@/lib/subscription';
 
-const client = new Anthropic();
-
 export async function GET() {
   // Check subscription
   const subscribed = await isSubscribed();
@@ -21,6 +19,8 @@ export async function GET() {
       { status: 500 }
     );
   }
+
+  const client = new Anthropic();
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -4,8 +4,6 @@ import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
-const anthropic = new Anthropic();
-
 /**
  * POST /api/onboarding
  * Accepts a single trade + trading style context, saves the trade,
@@ -20,6 +18,8 @@ export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'AI not configured.' }, { status: 500 });
   }
+
+  const anthropic = new Anthropic();
 
   let body: any;
   try { body = await req.json(); } catch {

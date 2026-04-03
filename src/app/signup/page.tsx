@@ -17,7 +17,8 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+    const redirectTo = `${appUrl}/auth/callback`;
     const { error } = await supabase.auth.signUp({
       email,
       password,

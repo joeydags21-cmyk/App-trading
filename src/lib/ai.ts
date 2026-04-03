@@ -1,7 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Trade, AIAnalysis } from '@/types';
 
-const client = new Anthropic();
+function getClient() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set. Add it to your Vercel environment variables.');
+  }
+  return new Anthropic();
+}
 
 export async function analyzeTradesWithAI(trades: Trade[], rules?: {
   max_trades_per_day?: number | null;
@@ -22,6 +27,7 @@ export async function analyzeTradesWithAI(trades: Trade[], rules?: {
     };
   }
 
+  const client = getClient();
   const { statsBlock, winRate, winProb } = buildTradeSummary(safeTrades, rules);
 
   const prompt = `You are an elite futures trading coach. You have this trader's real numbers. Deliver three focused coaching insights — direct, specific, no fluff.
@@ -111,6 +117,7 @@ Rules:
 - No filler. No "it's important to". No promises.
 - Use headers: "Fix:", "Keep:"`;
 
+  const client = getClient();
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 600,
