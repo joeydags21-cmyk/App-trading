@@ -1,156 +1,166 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence, useInView, useReducedMotion } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { createClient } from '@/lib/supabase/client';
 import { Trade } from '@/types';
 
-// ── Circular progress ring ────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const RING_SIZE = 148;
-const STROKE = 9;
-const RADIUS = (RING_SIZE - STROKE * 2) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+type GoalType = 'daily' | 'weekly' | 'monthly';
 
-function ringColor(p: number) {
-  if (p >= 1) return { stroke: '#34d399', glow: '#34d39966' };
-  if (p >= 0.7) return { stroke: '#a78bfa', glow: '#a78bfa66' };
-  if (p >= 0.4) return { stroke: '#60a5fa', glow: '#60a5fa55' };
-  return { stroke: '#f87171', glow: '#f8717155' };
+interface GoalSettings {
+  goal_type: GoalType;
+  goal_amount: number;
 }
 
-function RingProgress({ progress, animate: shouldAnimate }: { progress: number; animate: boolean }) {
-  const reduce = useReducedMotion();
-  const clamped = Math.min(1, Math.max(0, progress));
-  const offset = CIRCUMFERENCE * (1 - clamped);
-  const pct = Math.round(clamped * 100);
-  const { stroke, glow } = ringColor(clamped);
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
+function fmt(n: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function getPeriodStart(type: GoalType): string {
+  const now = new Date();
+  if (type === 'daily') return now.toISOString().slice(0, 10);
+  if (type === 'weekly') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - d.getDay());
+    return d.toISOString().slice(0, 10);
+  }
+  return now.toISOString().slice(0, 7) + '-01';
+}
+
+function getPeriodTrades(trades: Trade[], type: GoalType): Trade[] {
+  const start = getPeriodStart(type);
+  return trades.filter(t => t.date >= start);
+}
+
+function getPaceStatus(pnl: number, goal: number, type: GoalType): 'ahead' | 'on' | 'behind' {
+  if (goal <= 0) return 'on';
+  const now = new Date();
+  let elapsed: number;
+  if (type === 'daily') {
+    // intraday: hours elapsed / 8 trading hours
+    const h = now.getHours();
+    elapsed = Math.min(Math.max((h - 9) / 7, 0), 1);
+  } else if (type === 'weekly') {
+    elapsed = Math.min((now.getDay()) / 5, 1);
+  } else {
+    const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    elapsed = now.getDate() / days;
+  }
+  const ratio = pnl / goal;
+  if (ratio >= elapsed + 0.1) return 'ahead';
+  if (ratio < elapsed - 0.1) return 'behind';
+  return 'on';
+}
+
+function computeStreak(trades: Trade[], type: GoalType, goal: number): number {
+  if (goal <= 0 || trades.length === 0) return 0;
+
+  // Group trades by period
+  const byPeriod: Record<string, number> = {};
+  for (const t of trades) {
+    let key: string;
+    if (type === 'daily') key = t.date.slice(0, 10);
+    else if (type === 'weekly') {
+      const d = new Date(t.date);
+      const start = new Date(d);
+      start.setDate(d.getDate() - d.getDay());
+      key = start.toISOString().slice(0, 10);
+    } else {
+      key = t.date.slice(0, 7);
+    }
+    byPeriod[key] = (byPeriod[key] ?? 0) + t.pnl;
+  }
+
+  const periods = Object.entries(byPeriod).sort((a, b) => b[0].localeCompare(a[0]));
+  let streak = 0;
+  for (const [, pnl] of periods) {
+    if (pnl >= goal) streak++;
+    else break;
+  }
+  return streak;
+}
+
+// ── Shimmer skeleton ──────────────────────────────────────────────────────────
+
+function Shimmer({ className }: { className: string }) {
   return (
-    <div
-      className="relative flex items-center justify-center flex-shrink-0"
-      style={{ width: RING_SIZE, height: RING_SIZE }}
-    >
-      <svg
-        width={RING_SIZE}
-        height={RING_SIZE}
-        style={{ transform: 'rotate(-90deg)' }}
-        aria-hidden="true"
-      >
-        {/* Track */}
-        <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RADIUS}
-          fill="none"
-          stroke="#27272a"
-          strokeWidth={STROKE}
-        />
-        {/* Progress arc */}
-        <motion.circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RADIUS}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE}
-          initial={{ strokeDashoffset: CIRCUMFERENCE }}
-          animate={shouldAnimate ? { strokeDashoffset: offset } : { strokeDashoffset: offset }}
-          transition={
-            reduce
-              ? { duration: 0 }
-              : { duration: 1.4, ease: [0.16, 1, 0.3, 1], delay: 0.1 }
-          }
-          style={{ filter: `drop-shadow(0 0 8px ${glow})` }}
-        />
-      </svg>
-
-      {/* Center text */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <motion.span
-          className="text-2xl font-bold text-zinc-100 tabular-nums"
-          key={pct}
-          initial={{ opacity: 0, scale: 0.85 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5, duration: 0.35 }}
-        >
-          {pct}%
-        </motion.span>
-        <span className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">
-          of goal
-        </span>
-      </div>
+    <div className={`relative overflow-hidden rounded-lg bg-zinc-800/60 ${className}`}>
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
     </div>
   );
 }
 
-// ── Shimmer bar ───────────────────────────────────────────────────────────────
+// ── Goal type toggle ──────────────────────────────────────────────────────────
 
-function ShimmerBar({ w = 'w-full', h = 'h-3' }: { w?: string; h?: string }) {
+const TYPES: GoalType[] = ['daily', 'weekly', 'monthly'];
+
+function GoalTypeToggle({
+  value,
+  onChange,
+}: {
+  value: GoalType;
+  onChange: (t: GoalType) => void;
+}) {
+  const reduce = useReducedMotion();
   return (
-    <motion.div
-      className={`${w} ${h} rounded-lg bg-zinc-800`}
-      animate={{ opacity: [0.5, 0.75, 0.5] }}
-      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-    />
+    <div className="relative flex rounded-xl bg-zinc-800/60 p-0.5 gap-0.5">
+      {TYPES.map(t => (
+        <button
+          key={t}
+          onClick={() => onChange(t)}
+          className="relative z-10 px-3 py-1 text-xs font-medium capitalize transition-colors rounded-lg"
+          style={{ color: value === t ? '#fff' : '#71717a' }}
+        >
+          {value === t && (
+            <motion.div
+              layoutId="goalTogglePill"
+              className="absolute inset-0 rounded-lg bg-gradient-to-r from-violet-600 to-blue-600"
+              transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 35 }}
+            />
+          )}
+          <span className="relative">{t}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
-// ── SQL setup card ────────────────────────────────────────────────────────────
+// ── Progress bar ──────────────────────────────────────────────────────────────
 
-const SETUP_SQL = `CREATE TABLE user_goals (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id)
-    ON DELETE CASCADE NOT NULL,
-  monthly_goal numeric NOT NULL,
-  created_at timestamptz DEFAULT now() NOT NULL,
-  CONSTRAINT user_goals_user_id_unique UNIQUE (user_id)
-);
-
-ALTER TABLE user_goals ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can manage their own goals"
-  ON user_goals FOR ALL
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);`;
-
-function SetupCard() {
-  const [copied, setCopied] = useState(false);
-
-  function copySQL() {
-    navigator.clipboard.writeText(SETUP_SQL).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
+function ProgressBar({ progress, pace }: { progress: number; pace: 'ahead' | 'on' | 'behind' }) {
+  const reduce = useReducedMotion();
+  const clampedPct = Math.min(Math.max(progress * 100, 0), 100);
+  const color =
+    progress >= 1 ? '#10b981' :
+    pace === 'ahead' ? '#10b981' :
+    pace === 'on' ? '#f59e0b' :
+    '#ef4444';
 
   return (
-    <div className="bg-zinc-900 border border-amber-500/20 rounded-2xl p-5">
-      <div className="flex items-center gap-2.5 mb-3">
-        <div className="w-7 h-7 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
-          <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
-            <path d="M7.5 2L13.5 12.5H1.5L7.5 2Z" stroke="#fbbf24" strokeWidth="1.3" strokeLinejoin="round"/>
-            <path d="M7.5 6v3M7.5 10.5v.5" stroke="#fbbf24" strokeWidth="1.3" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <h3 className="text-sm font-semibold text-zinc-200">Monthly Goal Tracker — Setup Required</h3>
-      </div>
-      <p className="text-sm text-zinc-500 mb-3 leading-relaxed">
-        Run this SQL in your <strong className="text-zinc-400">Supabase SQL Editor</strong> to enable goal tracking:
-      </p>
-      <div className="relative">
-        <pre className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-xs text-zinc-400 overflow-x-auto leading-relaxed font-mono whitespace-pre">
-          {SETUP_SQL}
-        </pre>
-        <motion.button
-          whileTap={{ scale: 0.94 }}
-          onClick={copySQL}
-          className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
-        >
-          {copied ? 'Copied!' : 'Copy'}
-        </motion.button>
-      </div>
+    <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden">
+      <motion.div
+        className="absolute left-0 top-0 h-full rounded-full"
+        style={{ backgroundColor: color }}
+        initial={{ width: 0 }}
+        animate={{ width: `${clampedPct}%` }}
+        transition={reduce ? { duration: 0 } : { duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      />
+      {progress >= 1 && (
+        <motion.div
+          className="absolute inset-0 rounded-full"
+          style={{ backgroundColor: color, opacity: 0.3 }}
+          animate={{ opacity: [0.3, 0.6, 0.3] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+      )}
     </div>
   );
 }
@@ -159,138 +169,84 @@ function SetupCard() {
 
 function GoalForm({
   initial,
-  onSave,
-  onCancel,
+  initialType,
   saving,
   error,
+  onSave,
+  onCancel,
 }: {
   initial: string;
-  onSave: (val: string) => void;
-  onCancel?: () => void;
+  initialType: GoalType;
   saving: boolean;
   error: string;
+  onSave: (amount: string, type: GoalType) => void;
+  onCancel?: () => void;
 }) {
-  const [input, setInput] = useState(initial);
+  const [amount, setAmount] = useState(initial);
+  const [type, setType] = useState<GoalType>(initialType);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  function handleInput(raw: string) {
+    const clean = raw.replace(/[^0-9.]/g, '');
+    setAmount(clean);
+  }
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      key="goal-form"
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 8 }}
-      transition={{ duration: 0.25 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-4"
     >
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-7 h-7 bg-violet-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
-          <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
-            <path d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z" stroke="#a78bfa" strokeWidth="1.2" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-100">Monthly Profit Goal</h3>
-          <p className="text-xs text-zinc-600 mt-0.5">Track your progress every day</p>
-        </div>
+      <div>
+        <p className="text-xs text-zinc-500 mb-3">What's your {type} profit target?</p>
+        <GoalTypeToggle value={type} onChange={setType} />
       </div>
 
-      <div className="flex gap-2.5">
-        <div className="relative flex-1">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium pointer-events-none">
-            $
-          </span>
-          <input
-            ref={inputRef}
-            type="number"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !saving && onSave(input)}
-            placeholder="e.g. 5000"
-            min="1"
-            step="100"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-8 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 transition-all appearance-none"
-          />
-        </div>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-medium pointer-events-none">$</span>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="decimal"
+          placeholder="500"
+          value={amount}
+          onChange={e => handleInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && onSave(amount, type)}
+          className="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-xl pl-7 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/30 transition-all"
+        />
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+
+      <div className="flex gap-2">
         <motion.button
           whileTap={{ scale: 0.96 }}
-          onClick={() => onSave(input)}
+          onClick={() => onSave(amount, type)}
           disabled={saving}
-          className="px-4 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-400 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex-shrink-0"
+          className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
         >
-          {saving ? 'Saving…' : onCancel ? 'Update' : 'Set Goal'}
+          {saving ? 'Saving…' : 'Set Goal'}
         </motion.button>
         {onCancel && (
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={onCancel}
-            className="px-3 py-2.5 rounded-xl bg-zinc-800 text-zinc-400 text-sm font-medium border border-zinc-700 hover:bg-zinc-700 transition-colors flex-shrink-0"
+            className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-400 text-sm hover:text-zinc-200 transition-colors"
           >
             Cancel
           </motion.button>
         )}
       </div>
-
-      {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
-
-      {!onCancel && (
-        <p className="text-xs text-zinc-600 mt-3">
-          Set a monthly profit target. We&apos;ll track your daily pace and give you a focused
-          coaching cue.
-        </p>
-      )}
     </motion.div>
   );
 }
-
-// ── Pace + feedback ───────────────────────────────────────────────────────────
-
-function getPaceStatus(
-  totalProfit: number,
-  goal: number,
-  tradesCount: number
-): 'no-trades' | 'ahead' | 'on-track' | 'behind' {
-  if (tradesCount === 0) return 'no-trades';
-  const today = new Date();
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const elapsed = today.getDate() / daysInMonth;
-  const actual = goal > 0 ? totalProfit / goal : 0;
-  if (actual >= elapsed + 0.1) return 'ahead';
-  if (actual < elapsed - 0.1) return 'behind';
-  return 'on-track';
-}
-
-const FEEDBACK: Record<string, { label: string; text: string; bg: string; border: string; accent: string }> = {
-  'no-trades': {
-    label: 'No data',
-    text: 'Add trades to start tracking your monthly progress.',
-    bg: 'bg-zinc-800/50',
-    border: 'border-zinc-700/60',
-    accent: 'text-zinc-500',
-  },
-  ahead: {
-    label: 'Ahead',
-    text: "You're ahead of your target — stay disciplined and don't get overconfident.",
-    bg: 'bg-emerald-500/5',
-    border: 'border-emerald-500/15',
-    accent: 'text-emerald-400',
-  },
-  'on-track': {
-    label: 'On pace',
-    text: "You're on pace. Stay consistent and stick to your setups.",
-    bg: 'bg-blue-500/5',
-    border: 'border-blue-500/15',
-    accent: 'text-blue-400',
-  },
-  behind: {
-    label: 'Behind',
-    text: "You're slightly behind — don't force trades. Focus on execution, not outcome.",
-    bg: 'bg-amber-500/5',
-    border: 'border-amber-500/15',
-    accent: 'text-amber-400',
-  },
-};
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -299,258 +255,296 @@ interface GoalTrackerProps {
 }
 
 export default function GoalTracker({ trades }: GoalTrackerProps) {
-  const [goal, setGoal] = useState<number | null>(null);
+  const [settings, setSettings] = useState<GoalSettings | null>(null);
   const [fetching, setFetching] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [tableMissing, setTableMissing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [insight, setInsight] = useState<string | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inView = useInView(containerRef, { once: true, margin: '-20px' });
+  // ── Load goal from browser Supabase client directly (avoids cookie issues) ──
 
-  // Fetch goal once on mount
   useEffect(() => {
-    fetch('/api/goals')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d._table_missing) {
-          setTableMissing(true);
-        } else {
-          setGoal(d.monthly_goal != null ? Number(d.monthly_goal) : null);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setFetching(false));
-  }, []);
-
-  // Filter to current calendar month — goal tracker is monthly
-  const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-  const thisMonthTrades = trades.filter((t) => t.date.startsWith(currentMonth));
-  const totalProfit = thisMonthTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
-
-  // Safe calculations
-  const progress = goal != null && goal > 0 ? totalProfit / goal : 0;
-  const dailyTarget = goal != null && goal > 0 ? goal / 20 : null;
-  const pace = goal != null && goal > 0
-    ? getPaceStatus(totalProfit, goal, thisMonthTrades.length)
-    : 'no-trades';
-  const feedback = FEEDBACK[pace];
-
-  const saveGoal = useCallback(
-    async (inputVal: string) => {
-      const val = parseFloat(inputVal.replace(/,/g, ''));
-      if (!inputVal.trim() || isNaN(val) || val <= 0) {
-        setSaveError('Enter a valid goal amount.');
-        return;
-      }
-      setSaving(true);
-      setSaveError('');
+    (async () => {
       try {
-        const res = await fetch('/api/goals', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ monthly_goal: val }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          if (data.error === 'table_missing') {
-            setTableMissing(true);
-          } else {
-            setSaveError(data.error ?? 'Failed to save. Try again.');
-          }
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from('goal_settings')
+          .select('goal_type, goal_amount')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[GoalTracker] load:', error.message);
           return;
         }
-        setGoal(Number(data.monthly_goal));
-        setEditing(false);
-      } catch {
-        setSaveError('Failed to save. Try again.');
-      } finally {
-        setSaving(false);
-      }
-    },
-    []
-  );
 
-  const clearGoal = useCallback(async () => {
-    setSaving(true);
-    try {
-      await fetch('/api/goals', { method: 'DELETE' });
-      setGoal(null);
-    } catch {}
-    setSaving(false);
+        if (data?.goal_amount != null && data?.goal_type) {
+          setSettings({ goal_type: data.goal_type as GoalType, goal_amount: Number(data.goal_amount) });
+        }
+      } catch (err) {
+        console.error('[GoalTracker] load unexpected:', err);
+      } finally {
+        setFetching(false);
+      }
+    })();
   }, []);
 
-  function fmtMoney(n: number, signed = true) {
-    const abs = '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    if (!signed) return abs;
-    return (n >= 0 ? '+' : '−') + abs;
-  }
+  // ── Load AI insight whenever settings or trades change ───────────────────
 
-  const today = new Date();
-  const monthLabel = today.toLocaleString('default', { month: 'long', year: 'numeric' });
+  useEffect(() => {
+    if (!settings || trades.length < 3) return;
+    setInsightLoading(true);
+    fetch('/api/goal-insight')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setInsight(d?.insight ?? null))
+      .catch(() => setInsight(null))
+      .finally(() => setInsightLoading(false));
+  }, [settings?.goal_type, settings?.goal_amount, trades.length]);
 
-  // ── Loading skeleton ───────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────
+
+  const saveGoal = useCallback(async (rawAmount: string, type: GoalType) => {
+    const goal_amount = parseFloat(rawAmount.replace(/[^0-9.]/g, ''));
+    if (!goal_amount || goal_amount <= 0) { setSaveError('Enter a goal greater than $0.'); return; }
+    if (goal_amount > 10_000_000) { setSaveError('Goal too large.'); return; }
+
+    setSaving(true);
+    setSaveError('');
+
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setSaveError('Not signed in.'); return; }
+
+      const { error } = await supabase
+        .from('goal_settings')
+        .upsert({ user_id: user.id, goal_amount, goal_type: type }, { onConflict: 'user_id' });
+
+      if (error) { setSaveError(error.message); return; }
+
+      setSettings({ goal_type: type, goal_amount });
+      setEditing(false);
+    } catch (err: any) {
+      setSaveError('Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  const deleteGoal = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from('goal_settings').delete().eq('user_id', user.id);
+      setSettings(null);
+      setEditing(false);
+      setInsight(null);
+    } catch (err) {
+      console.error('[GoalTracker] delete:', err);
+    }
+  }, []);
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+
+  const periodTrades = useMemo(
+    () => settings ? getPeriodTrades(trades, settings.goal_type) : [],
+    [trades, settings?.goal_type]
+  );
+
+  const periodPnl = useMemo(
+    () => periodTrades.reduce((s, t) => s + (isFinite(t.pnl) ? t.pnl : 0), 0),
+    [periodTrades]
+  );
+
+  const progress = settings && settings.goal_amount > 0
+    ? Math.min(periodPnl / settings.goal_amount, 1.5)
+    : 0;
+
+  const remaining = settings ? Math.max(settings.goal_amount - periodPnl, 0) : 0;
+
+  const pace = settings ? getPaceStatus(periodPnl, settings.goal_amount, settings.goal_type) : 'on';
+
+  const streak = useMemo(
+    () => settings ? computeStreak(trades, settings.goal_type, settings.goal_amount) : 0,
+    [trades, settings?.goal_type, settings?.goal_amount]
+  );
+
+  const goalHit = progress >= 1;
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
 
   if (fetching) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-        <div className="flex items-center gap-2.5 mb-5">
-          <ShimmerBar w="w-7 h-7 rounded-xl" h="" />
-          <ShimmerBar w="w-44" h="h-3.5" />
+      <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <Shimmer className="h-5 w-32" />
+          <Shimmer className="h-7 w-44" />
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-          <ShimmerBar w="w-36 h-36 rounded-full" h="" />
-          <div className="flex-1 w-full space-y-3.5">
-            <ShimmerBar w="w-full" h="h-4" />
-            <ShimmerBar w="w-4/5" h="h-4" />
-            <ShimmerBar w="w-full" h="h-4" />
-          </div>
+        <Shimmer className="h-2 w-full" />
+        <div className="flex gap-3">
+          <Shimmer className="h-14 flex-1" />
+          <Shimmer className="h-14 flex-1" />
+          <Shimmer className="h-14 flex-1" />
         </div>
       </div>
     );
   }
 
-  // ── Table not set up ───────────────────────────────────────────────────────
+  // ── No goal set ───────────────────────────────────────────────────────────
 
-  if (tableMissing) return <SetupCard />;
-
-  // ── No goal / editing ──────────────────────────────────────────────────────
-
-  if (!goal || editing) {
+  if (!settings || editing) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+      <div
+        className="rounded-2xl border border-white/8 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 p-5"
+        style={{ boxShadow: '0 0 0 1px rgba(139,92,246,0.06), 0 8px 32px rgba(0,0,0,0.4)' }}
+      >
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="w-8 h-8 bg-violet-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z" stroke="#a78bfa" strokeWidth="1.2" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-zinc-100 tracking-tight">Goal Tracker</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">Set a target to start tracking</p>
+          </div>
+        </div>
         <AnimatePresence mode="wait">
           <GoalForm
-            key="form"
-            initial={editing && goal ? String(goal) : ''}
-            onSave={saveGoal}
-            onCancel={editing ? () => { setEditing(false); setSaveError(''); } : undefined}
+            key="new-form"
+            initial=""
+            initialType="monthly"
             saving={saving}
             error={saveError}
+            onSave={saveGoal}
+            onCancel={editing ? () => { setEditing(false); setSaveError(''); } : undefined}
           />
         </AnimatePresence>
       </div>
     );
   }
 
-  // ── Goal set — full tracker ────────────────────────────────────────────────
+  // ── Full widget ───────────────────────────────────────────────────────────
+
+  const paceColor = goalHit ? 'text-emerald-400' : pace === 'ahead' ? 'text-emerald-400' : pace === 'on' ? 'text-amber-400' : 'text-red-400';
+  const paceLabel = goalHit ? 'Goal hit! 🎉' : pace === 'ahead' ? 'Ahead of pace' : pace === 'on' ? 'On pace' : 'Behind pace';
+  const label = settings.goal_type.charAt(0).toUpperCase() + settings.goal_type.slice(1);
 
   return (
     <motion.div
-      ref={containerRef}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden"
+      layout
+      className="rounded-2xl border border-white/8 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 p-5 space-y-4 relative overflow-hidden"
+      style={{
+        boxShadow: goalHit
+          ? '0 0 0 1px rgba(16,185,129,0.25), 0 8px 40px rgba(16,185,129,0.1), 0 0 60px rgba(16,185,129,0.06)'
+          : '0 0 0 1px rgba(139,92,246,0.06), 0 8px 32px rgba(0,0,0,0.4)',
+      }}
     >
-      {/* Card header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/60">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-violet-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
-              <path
-                d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z"
-                stroke="#a78bfa"
-                strokeWidth="1.2"
-                strokeLinejoin="round"
-              />
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${goalHit ? 'bg-emerald-500/15' : 'bg-violet-500/10'}`}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z" stroke={goalHit ? '#10b981' : '#a78bfa'} strokeWidth="1.2" strokeLinejoin="round"/>
             </svg>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100">Monthly Profit Goal</h3>
-            <p className="text-xs text-zinc-600 mt-0.5">{monthLabel}</p>
+            <h3 className="text-sm font-bold text-zinc-100 tracking-tight">{label} Goal</h3>
+            <p className={`text-xs mt-0.5 font-medium ${paceColor}`}>{paceLabel}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={() => { setEditing(true); setSaveError(''); }}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors font-medium"
-          >
-            Edit
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={clearGoal}
-            disabled={saving}
-            className="text-xs text-zinc-700 hover:text-red-400 transition-colors font-medium disabled:opacity-40"
-          >
-            Clear
-          </motion.button>
-        </div>
-      </div>
-
-      {/* Card body */}
-      <div className="p-5">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-
-          {/* Circular ring — only animates when in view */}
-          <RingProgress progress={progress} animate={inView} />
-
-          {/* Metrics */}
-          <div className="flex-1 w-full">
-            {[
-              {
-                label: 'Monthly Goal',
-                value: fmtMoney(goal, false),
-                valueClass: 'text-zinc-100',
-                hint: null,
-              },
-              {
-                label: 'Daily Target',
-                value: dailyTarget != null ? fmtMoney(dailyTarget, false) : '—',
-                valueClass: 'text-zinc-100',
-                hint: '÷ 20 trading days',
-              },
-              {
-                label: 'This Month',
-                value: fmtMoney(totalProfit),
-                valueClass: totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
-                hint:
-                  thisMonthTrades.length === 0
-                    ? 'No trades yet this month'
-                    : `${thisMonthTrades.length} trade${thisMonthTrades.length === 1 ? '' : 's'}`,
-              },
-            ].map(({ label, value, valueClass, hint }, i) => (
-              <motion.div
-                key={label}
-                initial={{ opacity: 0, x: -6 }}
-                animate={inView ? { opacity: 1, x: 0 } : {}}
-                transition={{ delay: 0.25 + i * 0.07, duration: 0.35 }}
-                className="flex items-center justify-between py-2.5 border-b border-zinc-800/50 last:border-0"
-              >
-                <p className="text-xs text-zinc-500">{label}</p>
-                <div className="text-right">
-                  <p className={`text-sm font-bold tabular-nums ${valueClass}`}>{value}</p>
-                  {hint && <p className="text-[10px] text-zinc-700 mt-0.5">{hint}</p>}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        {/* Pace / AI feedback */}
-        <AnimatePresence>
-          {inView && (
+        <div className="flex items-center gap-2">
+          {streak >= 2 && (
             <motion.div
-              key={pace}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ delay: 0.65, duration: 0.4 }}
-              className={`mt-4 flex gap-3 items-start p-3.5 rounded-xl border ${feedback.bg} ${feedback.border}`}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20"
             >
-              <span
-                className={`text-[10px] font-bold uppercase tracking-widest flex-shrink-0 mt-0.5 w-16 ${feedback.accent}`}
-              >
-                {feedback.label}
-              </span>
-              <p className="text-sm text-zinc-300 leading-relaxed">{feedback.text}</p>
+              <span className="text-xs">🔥</span>
+              <span className="text-xs font-bold text-orange-400">{streak}</span>
             </motion.div>
           )}
-        </AnimatePresence>
+          <button
+            onClick={() => { setEditing(true); setSaveError(''); }}
+            className="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
+            title="Edit goal"
+          >
+            <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+              <path d="M11.5 1.5L13.5 3.5L5 12H3V10L11.5 1.5Z" stroke="#71717a" strokeWidth="1.3" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* Progress bar */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-500">
+            {fmt(periodPnl)} of {fmt(settings.goal_amount)}
+          </span>
+          <span className={`text-xs font-bold ${paceColor}`}>
+            {Math.min(Math.round(progress * 100), 100)}%
+          </span>
+        </div>
+        <ProgressBar progress={progress} pace={pace} />
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-zinc-800/50 rounded-xl p-3 text-center">
+          <p className="text-[10px] text-zinc-500 mb-0.5">P&L</p>
+          <p className={`text-sm font-bold ${periodPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {fmt(periodPnl)}
+          </p>
+        </div>
+        <div className="bg-zinc-800/50 rounded-xl p-3 text-center">
+          <p className="text-[10px] text-zinc-500 mb-0.5">Remaining</p>
+          <p className="text-sm font-bold text-zinc-200">{goalHit ? '—' : fmt(remaining)}</p>
+        </div>
+        <div className="bg-zinc-800/50 rounded-xl p-3 text-center">
+          <p className="text-[10px] text-zinc-500 mb-0.5">Target</p>
+          <p className="text-sm font-bold text-zinc-200">{fmt(settings.goal_amount)}</p>
+        </div>
+      </div>
+
+      {/* Streak banner */}
+      {streak >= 2 && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-orange-500/8 border border-orange-500/15"
+        >
+          <span>🔥</span>
+          <p className="text-xs text-orange-300 font-medium">
+            {streak}-{settings.goal_type} goal streak — keep it going
+          </p>
+        </motion.div>
+      )}
+
+      {/* AI Insight */}
+      <AnimatePresence>
+        {(insight || insightLoading) && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/8 border border-violet-500/15"
+          >
+            <span className="text-violet-400 mt-0.5 flex-shrink-0 text-xs">✦</span>
+            {insightLoading ? (
+              <Shimmer className="h-3 w-full mt-1" />
+            ) : (
+              <p className="text-xs text-violet-200 leading-relaxed">{insight}</p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

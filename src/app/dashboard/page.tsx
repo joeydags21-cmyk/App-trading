@@ -238,56 +238,94 @@ function ProgressMetrics({ trades }: { trades: Trade[] }) {
   );
 }
 
-// ─── Today's Trading Brief ────────────────────────────────────────────────────
+// ─── Today's Trading Focus ────────────────────────────────────────────────────
 
 function TradingBrief({ trades }: { trades: Trade[] }) {
   if (trades.length < 3) return null;
 
   const result = detectPatterns(trades);
-  const topPattern = result.patterns[0] ?? null;
+  const patterns = result.patterns.slice(0, 2);
+
+  // Classify the focus tone for visual treatment
+  const isWarning = result.focus.includes('loss') || result.focus.includes('pause') || result.focus.includes('behind') || result.focus.includes('revenge');
+  const isPositive = result.focus.includes('streak') || result.focus.includes('rhythm') || result.focus.includes('strong') || result.focus.includes('win rate');
 
   return (
     <FadeUp>
-      <div className="rounded-2xl border border-zinc-800/70 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 p-5 md:p-6">
-        {/* Header */}
-        <div className="flex items-center gap-2.5 mb-4">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-          </span>
-          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
-            Today&apos;s Trading Focus
-          </p>
-        </div>
+      <div className="rounded-2xl border border-zinc-800/70 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 overflow-hidden"
+        style={{ boxShadow: '0 4px 24px rgba(0,0,0,0.3)' }}
+      >
+        {/* Top accent bar */}
+        <div className={`h-0.5 w-full ${isPositive ? 'bg-gradient-to-r from-emerald-500/60 to-transparent' : isWarning ? 'bg-gradient-to-r from-amber-500/60 to-transparent' : 'bg-gradient-to-r from-violet-500/40 to-transparent'}`} />
 
-        {/* Focus rule */}
-        <p className="text-zinc-100 text-[15px] font-medium leading-relaxed mb-4">
-          {result.focus}
-        </p>
-
-        {/* Detected pattern */}
-        {topPattern && (
-          <div
-            className={`flex gap-3 items-start p-3.5 rounded-xl border ${
-              topPattern.severity === 'positive'
-                ? 'bg-emerald-500/5 border-emerald-500/15'
-                : 'bg-amber-500/5 border-amber-500/15'
-            }`}
-          >
-            <span
-              className={`text-[10px] font-bold uppercase tracking-widest flex-shrink-0 mt-0.5 w-16 ${
-                topPattern.severity === 'positive'
-                  ? 'text-emerald-400'
-                  : 'text-amber-400'
-              }`}
-            >
-              {topPattern.severity === 'positive' ? 'Edge' : 'Warning'}
+        <div className="p-5 md:p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 ${isPositive ? 'bg-emerald-400' : isWarning ? 'bg-amber-400' : 'bg-violet-400'}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${isPositive ? 'bg-emerald-400' : isWarning ? 'bg-amber-400' : 'bg-violet-400'}`} />
+              </span>
+              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Today&apos;s Trading Focus
+              </p>
+            </div>
+            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg ${
+              isPositive ? 'bg-emerald-500/10 text-emerald-400'
+              : isWarning ? 'bg-amber-500/10 text-amber-400'
+              : 'bg-violet-500/10 text-violet-400'
+            }`}>
+              {isPositive ? 'In flow' : isWarning ? 'Stay sharp' : 'Stay consistent'}
             </span>
-            <p className="text-sm text-zinc-300 leading-relaxed">
-              {topPattern.description}
-            </p>
           </div>
-        )}
+
+          {/* Main coaching message */}
+          <p className={`text-[15px] font-semibold leading-relaxed mb-4 ${
+            isPositive ? 'text-zinc-100' : isWarning ? 'text-zinc-100' : 'text-zinc-100'
+          }`}>
+            {result.focus}
+          </p>
+
+          {/* Pattern cards */}
+          {patterns.length > 0 && (
+            <div className="space-y-2.5">
+              {patterns.map((p, i) => (
+                <motion.div
+                  key={p.label}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 + i * 0.08, duration: 0.35 }}
+                  className={`flex gap-3 items-start p-3.5 rounded-xl border ${
+                    p.severity === 'positive'
+                      ? 'bg-emerald-500/5 border-emerald-500/15'
+                      : 'bg-amber-500/5 border-amber-500/15'
+                  }`}
+                >
+                  <div className="flex-shrink-0 mt-0.5">
+                    {p.severity === 'positive' ? (
+                      <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+                        <path d="M7.5 1L9.5 5.5H14L10.5 8.5L12 13L7.5 10.5L3 13L4.5 8.5L1 5.5H5.5L7.5 1Z" stroke="#34d399" strokeWidth="1.2" strokeLinejoin="round"/>
+                      </svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+                        <path d="M7.5 2L13.5 12.5H1.5L7.5 2Z" stroke="#fbbf24" strokeWidth="1.3" strokeLinejoin="round"/>
+                        <path d="M7.5 6v3M7.5 10.5v.5" stroke="#fbbf24" strokeWidth="1.3" strokeLinecap="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${
+                      p.severity === 'positive' ? 'text-emerald-400' : 'text-amber-400'
+                    }`}>
+                      {p.severity === 'positive' ? 'Your edge' : 'Watch out'}
+                    </p>
+                    <p className="text-sm text-zinc-300 leading-relaxed">{p.description}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </FadeUp>
   );
@@ -750,6 +788,9 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
+      {/* Goal Tracker — always visible */}
+      <GoalTracker trades={trades} />
+
       {/* ── Empty state ── */}
       {trades.length === 0 && <EmptyState />}
 
@@ -759,9 +800,6 @@ export default function DashboardPage() {
 
           {/* Today's Trading Brief — always first */}
           <TradingBrief trades={trades} />
-
-          {/* Monthly Goal Tracker — free for all users */}
-          <GoalTracker trades={trades} />
 
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
